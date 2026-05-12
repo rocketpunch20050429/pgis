@@ -1,13 +1,453 @@
-import "./globals.css"
-export const metadata = {
-  title: "마을 안전 사각지대 예측 지도",
-  description: "베이지안 추론 기반 생활 안전 사각지대 동적 예측 및 PGIS 매핑 시스템",
+
+"use client"
+import { useEffect, useRef, useState, useCallback } from "react"
+import mapboxgl from "mapbox-gl"
+import * as turf from "@turf/turf"
+
+// ── 서울 종로구 중심 좌표 ──
+const CENTER = [126.9784, 37.5703]
+const ZOOM = 15
+
+// ── 샘플 위험 보고 데이터 (PGIS 시뮬레이션) ──
+const SAMPLE_REPORTS = [
+  { id:1, lng:126.9751, lat:37.5720, type:"조명 부족", intensity:4, time:"22:30", desc:"골목 안쪽 가로등 고장" },
+  { id:2, lng:126.9800, lat:37.5695, type:"시야 차단", intensity:5, time:"19:00", desc:"담벼락으로 시야 완전 차단" },
+  { id:3, lng:126.9770, lat:37.5680, type:"도로 파손", intensity:3, time:"08:15", desc:"인도 블록 파손" },
+  { id:4, lng:126.9815, lat:37.5715, type:"불법 주정차", intensity:4, time:"17:45", desc:"어린이보호구역 불법주정차" },
+  { id:5, lng:126.9760, lat:37.5740, type:"조명 부족", intensity:5, time:"23:00", desc:"공원 입구 조명 전무" },
+  { id:6, lng:126.9795, lat:37.5660, type:"시야 차단", intensity:3, time:"07:30", desc:"적치물로 보행 시야 방해" },
+  { id:7, lng:126.9830, lat:37.5700, type:"도로 파손", intensity:2, time:"12:00", desc:"맨홀 뚜껑 파손" },
+  { id:8, lng:126.9740, lat:37.5705, type:"조명 부족", intensity:4, time:"21:00", desc:"주택가 진입로 어두움" },
+  { id:9, lng:126.9810, lat:37.5735, type:"불법 주정차", intensity:5, time:"08:00", desc:"통학로 차량 점거" },
+  { id:10, lng:126.9775, lat:37.5665, type:"시야 차단", intensity:4, time:"18:30", desc:"공사 가림막 방치" },
+  { id:11, lng:126.9755, lat:37.5690, type:"조명 부족", intensity:3, time:"20:00", desc:"골목 조명 흐림" },
+  { id:12, lng:126.9820, lat:37.5680, type:"도로 파손", intensity:4, time:"09:30", desc:"보도블럭 융기" },
+]
+
+// ── 베이지안 계산 헬퍼 ──
+function computeBayesian(reports, hexGrid) {
+  const features = hexGrid.features.map(hex => {
+    const center = turf.centroid(hex)
+    const nearby = reports.filter(r => {
+      const d = turf.distance(center, turf.point([r.lng, r.lat]), {units:'meters'})
+      return d < 80
+    })
+    // Prior: 기본 위험도 0.2 (공공데이터 시뮬레이션)
+    const prior = 0.15 + Math.random() * 0.15
+    // Likelihood: 주민 보고 기반
+    const likelihood = nearby.length > 0
+      ? Math.min(1, nearby.reduce((s,r) => s + r.intensity/5, 0) / 3)
+      : 0
+    // Posterior (simplified Bayes update)
+    const evidence = prior * likelihood + (1 - prior) * 0.1
+    const posterior = evidence > 0 ? (prior * likelihood) / evidence : prior * 0.5
+    const variation = posterior - prior
+    return {
+      ...hex,
+      properties: {
+        ...hex.properties,
+        prior: Math.round(prior*100)/100,
+        likelihood: Math.round(likelihood*100)/100,
+        posterior: Math.round(posterior*100)/100,
+        variation: Math.round(variation*100)/100,
+        reportCount: nearby.length,
+        confidence: nearby.length >= 2 ? "high" : nearby.length === 1 ? "medium" : "low"
+      }
+    }
+  })
+  return { type:"FeatureCollection", features }
 }
-export default function RootLayout({ children }) {
+
+// ── 타입별 색상·아이콘 ──
+const TYPE_META = {
+  "조명 부족": { color:"#f59e0b", icon:"💡" },
+  "시야 차단": { color:"#ef4444", icon:"🚧" },
+  "도로 파손": { color:"#8b5cf6", icon:"🕳️" },
+  "불법 주정차": { color:"#3b82f6", icon:"🚗" },
+}
+
+const MAP_MODES = [
+  { id:"diagnostic", label:"진단 지도", desc:"Prior 대비 Posterior 편차" },
+  { id:"uncertainty", label:"신뢰도 지도", desc:"데이터 밀도 기반 신뢰도" },
+  { id:"posterior", label:"사후확률 지도", desc:"최종 위험 확률 분포" },
+]
+
+export default function Home() {
+  const mapContainer = useRef(null)
+  const mapRef = useRef(null)
+  const [mapMode, setMapMode] = useState("diagnostic")
+  const [sideOpen, setSideOpen] = useState(true)
+  const [reportMode, setReportMode] = useState(false)
+  const [reports, setReports] = useState(SAMPLE_REPORTS)
+  const [selectedHex, setSelectedHex] = useState(null)
+  const [reportForm, setReportForm] = useState(null)
+  const [stats, setStats] = useState({ total:0, avgPost:0, blindspots:0 })
+  const hexDataRef = useRef(null)
+
+  // Generate hex grid
+  const getHexGrid = useCallback(() => {
+    const bbox = [CENTER[0]-0.008, CENTER[1]-0.006, CENTER[0]+0.008, CENTER[1]+0.006]
+    return turf.hexGrid(bbox, 0.05, { units:'kilometers' })
+  }, [])
+
+  // Update map colors based on mode
+  const updateMapStyle = useCallback((map, mode, hexData) => {
+    if (!map || !map.getSource('hex-grid')) return
+    map.getSource('hex-grid').setData(hexData)
+    let paintProp
+    if (mode === "diagnostic") {
+      paintProp = [
+        'interpolate',['linear'],['get','variation'],
+        -0.1,'#10b981', 0,'#fbbf24', 0.15,'#f97316', 0.4,'#ef4444', 0.7,'#7f1d1d'
+      ]
+    } else if (mode === "uncertainty") {
+      paintProp = [
+        'match',['get','confidence'],
+        'high','#3b82f6','medium','#60a5fa','low','#1e3a5f','#1e3a5f'
+      ]
+    } else {
+      paintProp = [
+        'interpolate',['linear'],['get','posterior'],
+        0,'#064e3b', 0.2,'#10b981', 0.4,'#fbbf24', 0.6,'#f97316', 0.8,'#ef4444'
+      ]
+    }
+    map.setPaintProperty('hex-fill','fill-color', paintProp)
+    // opacity by confidence for uncertainty mode
+    if (mode === "uncertainty") {
+      map.setPaintProperty('hex-fill','fill-opacity',[
+        'match',['get','confidence'],'high',0.7,'medium',0.45,'low',0.15, 0.15
+      ])
+    } else {
+      map.setPaintProperty('hex-fill','fill-opacity', 0.55)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (mapRef.current) return
+    mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN
+    const map = new mapboxgl.Map({
+      container: mapContainer.current,
+      style: 'mapbox://styles/mapbox/dark-v11',
+      center: CENTER,
+      zoom: ZOOM,
+      pitch: 30,
+    })
+    mapRef.current = map
+
+    map.on('load', () => {
+      const hexGrid = getHexGrid()
+      const hexData = computeBayesian(reports, hexGrid)
+      hexDataRef.current = hexData
+
+      // Stats
+      const posteriors = hexData.features.map(f=>f.properties.posterior)
+      setStats({
+        total: reports.length,
+        avgPost: (posteriors.reduce((a,b)=>a+b,0)/posteriors.length*100).toFixed(1),
+        blindspots: hexData.features.filter(f=>f.properties.variation>0.15).length
+      })
+
+      map.addSource('hex-grid', { type:'geojson', data:hexData })
+      map.addLayer({
+        id:'hex-fill', type:'fill', source:'hex-grid',
+        paint:{
+          'fill-color':['interpolate',['linear'],['get','variation'],
+            -0.1,'#10b981',0,'#fbbf24',0.15,'#f97316',0.4,'#ef4444',0.7,'#7f1d1d'],
+          'fill-opacity':0.55
+        }
+      })
+      map.addLayer({
+        id:'hex-line', type:'line', source:'hex-grid',
+        paint:{ 'line-color':'#334155', 'line-width':0.5, 'line-opacity':0.6 }
+      })
+
+      // Report markers
+      reports.forEach(r => {
+        const el = document.createElement('div')
+        el.style.cssText = `font-size:20px;cursor:pointer;filter:drop-shadow(0 0 4px rgba(0,0,0,0.5));`
+        el.textContent = TYPE_META[r.type]?.icon || "⚠️"
+        new mapboxgl.Marker({ element:el })
+          .setLngLat([r.lng, r.lat])
+          .setPopup(new mapboxgl.Popup({offset:15,className:'dark-popup'}).setHTML(
+            `<div style="background:#1a2332;color:#e2e8f0;padding:12px;border-radius:8px;min-width:180px">
+              <div style="font-weight:700;font-size:14px;margin-bottom:6px">${r.type}</div>
+              <div style="font-size:12px;color:#94a3b8;margin-bottom:4px">📍 ${r.desc}</div>
+              <div style="font-size:12px;color:#94a3b8">🕐 ${r.time} · 위험도 ${'🔴'.repeat(r.intensity)}${'⚪'.repeat(5-r.intensity)}</div>
+            </div>`
+          ))
+          .addTo(map)
+      })
+
+      // Hex click
+      map.on('click','hex-fill',(e)=>{
+        if(e.features?.length){
+          const p = e.features[0].properties
+          setSelectedHex(p)
+        }
+      })
+
+      // Click for new report
+      map.on('click',(e)=>{
+        if(reportMode){
+          // handled via state
+        }
+      })
+    })
+
+    map.addControl(new mapboxgl.NavigationControl(),'bottom-right')
+    return () => map.remove()
+  }, [])
+
+  // Update style when mode changes
+  useEffect(() => {
+    if (mapRef.current && hexDataRef.current && mapRef.current.isStyleLoaded()) {
+      updateMapStyle(mapRef.current, mapMode, hexDataRef.current)
+    }
+  }, [mapMode, updateMapStyle])
+
+  // Report click handler on map
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+    const handler = (e) => {
+      if (reportMode) {
+        setReportForm({ lng: e.lngLat.lng.toFixed(6), lat: e.lngLat.lat.toFixed(6), type:"조명 부족", intensity:3 })
+      }
+    }
+    map.on('click', handler)
+    return () => map.off('click', handler)
+  }, [reportMode])
+
+  const submitReport = () => {
+    if (!reportForm) return
+    const newReport = {
+      id: reports.length+1,
+      lng: parseFloat(reportForm.lng), lat: parseFloat(reportForm.lat),
+      type: reportForm.type, intensity: reportForm.intensity,
+      time: new Date().toTimeString().slice(0,5),
+      desc: reportForm.desc || "주민 신고"
+    }
+    const updated = [...reports, newReport]
+    setReports(updated)
+    setReportForm(null)
+    setReportMode(false)
+    // Re-compute bayesian
+    const hexData = computeBayesian(updated, getHexGrid())
+    hexDataRef.current = hexData
+    if (mapRef.current?.getSource('hex-grid')) {
+      updateMapStyle(mapRef.current, mapMode, hexData)
+    }
+    // Add marker
+    const el = document.createElement('div')
+    el.style.cssText = 'font-size:20px;cursor:pointer;filter:drop-shadow(0 0 4px rgba(0,0,0,0.5));animation:pulse 1s infinite;'
+    el.textContent = TYPE_META[newReport.type]?.icon || "⚠️"
+    new mapboxgl.Marker({element:el}).setLngLat([newReport.lng,newReport.lat]).addTo(mapRef.current)
+    // Update stats
+    const posteriors = hexData.features.map(f=>f.properties.posterior)
+    setStats({
+      total: updated.length,
+      avgPost: (posteriors.reduce((a,b)=>a+b,0)/posteriors.length*100).toFixed(1),
+      blindspots: hexData.features.filter(f=>f.properties.variation>0.15).length
+    })
+  }
+
   return (
-    <html lang="ko"><head>
-      <link href="https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.css" rel="stylesheet"/>
-      <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" rel="stylesheet"/>
-    </head><body>{children}</body></html>
+    <div style={{display:'flex',height:'100vh',background:'var(--navy)',color:'var(--text)'}}>
+      {/* ── 사이드 패널 ── */}
+      <div style={{
+        width: sideOpen ? 360 : 0, overflow:'hidden',
+        transition:'width 0.3s ease', background:'var(--panel)',
+        borderRight:'1px solid #334155', display:'flex', flexDirection:'column',
+        position:'relative', zIndex:10
+      }}>
+        <div style={{padding:'20px 24px',borderBottom:'1px solid #334155'}}>
+          <div style={{fontSize:11,color:'var(--accent)',fontWeight:700,letterSpacing:2,marginBottom:4}}>BAYESIAN PGIS</div>
+          <h1 style={{fontSize:18,fontWeight:800,lineHeight:1.4}}>마을 안전 사각지대<br/>예측 지도</h1>
+          <p style={{fontSize:11,color:'var(--muted)',marginTop:6}}>베이지안 추론 기반 동적 위험 예측 시스템</p>
+        </div>
+
+        {/* Stats */}
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,padding:'16px 24px'}}>
+          {[
+            {label:'신고 건수',value:stats.total,unit:'건',color:'var(--accent)'},
+            {label:'평균 위험도',value:stats.avgPost,unit:'%',color:'var(--warning)'},
+            {label:'사각지대',value:stats.blindspots,unit:'격자',color:'var(--danger)'},
+          ].map((s,i)=>(
+            <div key={i} style={{background:'#0f1729',borderRadius:10,padding:'12px 10px',textAlign:'center'}}>
+              <div style={{fontSize:20,fontWeight:800,color:s.color}}>{s.value}<span style={{fontSize:10,color:'var(--muted)'}}>{s.unit}</span></div>
+              <div style={{fontSize:10,color:'var(--muted)',marginTop:2}}>{s.label}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Map Mode Selector */}
+        <div style={{padding:'0 24px 16px'}}>
+          <div style={{fontSize:11,fontWeight:700,color:'var(--muted)',marginBottom:8}}>지도 모드</div>
+          {MAP_MODES.map(m=>(
+            <button key={m.id} onClick={()=>setMapMode(m.id)} style={{
+              display:'block',width:'100%',padding:'10px 14px',marginBottom:6,
+              borderRadius:8,border: mapMode===m.id ? '1px solid var(--accent)' : '1px solid #334155',
+              background: mapMode===m.id ? 'rgba(59,130,246,0.12)' : 'transparent',
+              color:'var(--text)',cursor:'pointer',textAlign:'left',transition:'all 0.2s'
+            }}>
+              <div style={{fontSize:13,fontWeight:600}}>{m.label}</div>
+              <div style={{fontSize:10,color:'var(--muted)'}}>{m.desc}</div>
+            </button>
+          ))}
+        </div>
+
+        {/* Report Button */}
+        <div style={{padding:'0 24px 16px'}}>
+          <button onClick={()=>{setReportMode(!reportMode);setReportForm(null)}} style={{
+            width:'100%',padding:'12px',borderRadius:10,border:'none',cursor:'pointer',fontWeight:700,fontSize:13,
+            background: reportMode ? 'var(--danger)' : 'var(--accent)', color:'white',
+            transition:'all 0.2s'
+          }}>
+            {reportMode ? '✕ 신고 취소' : '📍 위험 지점 신고하기'}
+          </button>
+          {reportMode && !reportForm && (
+            <p style={{fontSize:11,color:'var(--warning)',marginTop:8,textAlign:'center'}}>
+              지도에서 위험 지점을 클릭하세요
+            </p>
+          )}
+        </div>
+
+        {/* Report Form */}
+        {reportForm && (
+          <div style={{padding:'0 24px 16px'}}>
+            <div style={{background:'#0f1729',borderRadius:10,padding:16}}>
+              <div style={{fontSize:12,fontWeight:700,marginBottom:10}}>🚨 위험 신고 작성</div>
+              <div style={{fontSize:10,color:'var(--muted)',marginBottom:10}}>📍 {reportForm.lat}, {reportForm.lng}</div>
+              <select value={reportForm.type} onChange={e=>setReportForm({...reportForm,type:e.target.value})}
+                style={{width:'100%',padding:8,borderRadius:6,border:'1px solid #334155',background:'var(--panel)',color:'var(--text)',fontSize:12,marginBottom:8}}>
+                {Object.keys(TYPE_META).map(t=><option key={t} value={t}>{TYPE_META[t].icon} {t}</option>)}
+              </select>
+              <div style={{fontSize:11,color:'var(--muted)',marginBottom:4}}>심리적 공포 수치</div>
+              <div style={{display:'flex',gap:4,marginBottom:10}}>
+                {[1,2,3,4,5].map(n=>(
+                  <button key={n} onClick={()=>setReportForm({...reportForm,intensity:n})} style={{
+                    flex:1,padding:'6px 0',borderRadius:6,border:'none',cursor:'pointer',fontSize:12,fontWeight:700,
+                    background: n<=reportForm.intensity ? (n>=4?'var(--danger)':n>=3?'var(--warning)':'var(--safe)') : '#334155',
+                    color:'white',transition:'all 0.15s'
+                  }}>{n}</button>
+                ))}
+              </div>
+              <input placeholder="상세 설명 (선택)" onChange={e=>setReportForm({...reportForm,desc:e.target.value})}
+                style={{width:'100%',padding:8,borderRadius:6,border:'1px solid #334155',background:'var(--panel)',color:'var(--text)',fontSize:12,marginBottom:10}}/>
+              <button onClick={submitReport} style={{
+                width:'100%',padding:10,borderRadius:8,border:'none',background:'var(--accent)',color:'white',fontWeight:700,fontSize:13,cursor:'pointer'
+              }}>신고 제출 → 베이즈 업데이트</button>
+            </div>
+          </div>
+        )}
+
+        {/* Selected Hex Info */}
+        {selectedHex && (
+          <div style={{padding:'0 24px 16px'}}>
+            <div style={{background:'#0f1729',borderRadius:10,padding:16}}>
+              <div style={{fontSize:12,fontWeight:700,marginBottom:10}}>📊 격자 베이지안 분석</div>
+              {[
+                {label:'사전 확률 (Prior)',value:`${(selectedHex.prior*100).toFixed(1)}%`,color:'var(--muted)'},
+                {label:'우도 (Likelihood)',value:`${(selectedHex.likelihood*100).toFixed(1)}%`,color:'var(--accent)'},
+                {label:'사후 확률 (Posterior)',value:`${(selectedHex.posterior*100).toFixed(1)}%`,color: selectedHex.posterior>0.5?'var(--danger)':'var(--warning)'},
+                {label:'편차 (Variation)',value:`${selectedHex.variation>0?'+':''}${(selectedHex.variation*100).toFixed(1)}%`,color: selectedHex.variation>0.15?'var(--danger)':'var(--safe)'},
+              ].map((item,i)=>(
+                <div key={i} style={{display:'flex',justifyContent:'space-between',padding:'6px 0',borderBottom:'1px solid #1e293b'}}>
+                  <span style={{fontSize:11,color:'var(--muted)'}}>{item.label}</span>
+                  <span style={{fontSize:13,fontWeight:700,color:item.color}}>{item.value}</span>
+                </div>
+              ))}
+              <div style={{marginTop:8,display:'flex',justifyContent:'space-between'}}>
+                <span style={{fontSize:11,color:'var(--muted)'}}>신고 건수</span>
+                <span style={{fontSize:13,fontWeight:700}}>{selectedHex.reportCount}건</span>
+              </div>
+              <div style={{marginTop:4,display:'flex',justifyContent:'space-between'}}>
+                <span style={{fontSize:11,color:'var(--muted)'}}>신뢰도</span>
+                <span style={{fontSize:11,padding:'2px 8px',borderRadius:10,fontWeight:600,
+                  background: selectedHex.confidence==='high'?'rgba(59,130,246,0.2)':selectedHex.confidence==='medium'?'rgba(245,158,11,0.2)':'rgba(100,116,139,0.2)',
+                  color: selectedHex.confidence==='high'?'var(--accent)':selectedHex.confidence==='medium'?'var(--warning)':'var(--muted)'
+                }}>{selectedHex.confidence==='high'?'높음':selectedHex.confidence==='medium'?'보통':'낮음'}</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Legend */}
+        <div style={{padding:'0 24px',marginTop:'auto',paddingBottom:20}}>
+          <div style={{fontSize:10,color:'var(--muted)',marginBottom:6}}>범례 — {MAP_MODES.find(m=>m.id===mapMode)?.label}</div>
+          {mapMode==='diagnostic' && (
+            <div style={{display:'flex',alignItems:'center',gap:4}}>
+              <span style={{fontSize:9,color:'var(--safe)'}}>안전</span>
+              <div style={{flex:1,height:6,borderRadius:3,background:'linear-gradient(to right,#10b981,#fbbf24,#f97316,#ef4444,#7f1d1d)'}}/>
+              <span style={{fontSize:9,color:'var(--danger)'}}>사각지대</span>
+            </div>
+          )}
+          {mapMode==='uncertainty' && (
+            <div style={{display:'flex',gap:8}}>
+              {[{c:'#3b82f6',l:'높음'},{c:'#60a5fa',l:'보통'},{c:'#1e3a5f',l:'낮음'}].map((v,i)=>(
+                <div key={i} style={{display:'flex',alignItems:'center',gap:4}}>
+                  <div style={{width:10,height:10,borderRadius:3,background:v.c}}/>
+                  <span style={{fontSize:10}}>{v.l}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {mapMode==='posterior' && (
+            <div style={{display:'flex',alignItems:'center',gap:4}}>
+              <span style={{fontSize:9,color:'var(--safe)'}}>0%</span>
+              <div style={{flex:1,height:6,borderRadius:3,background:'linear-gradient(to right,#064e3b,#10b981,#fbbf24,#f97316,#ef4444)'}}/>
+              <span style={{fontSize:9,color:'var(--danger)'}}>80%+</span>
+            </div>
+          )}
+          <div style={{fontSize:9,color:'#475569',marginTop:8,lineHeight:1.4}}>
+            50m×50m 헥사곤 격자 · 베이지안 업데이트<br/>서울특별시 종로구 일대
+          </div>
+        </div>
+      </div>
+
+      {/* ── Toggle Button ── */}
+      <button onClick={()=>setSideOpen(!sideOpen)} style={{
+        position:'absolute',left:sideOpen?360:0,top:'50%',transform:'translateY(-50%)',
+        zIndex:20,width:24,height:48,background:'var(--panel)',border:'1px solid #334155',
+        borderLeft:'none',borderRadius:'0 8px 8px 0',color:'var(--text)',cursor:'pointer',
+        fontSize:12,display:'flex',alignItems:'center',justifyContent:'center',transition:'left 0.3s'
+      }}>{sideOpen?'‹':'›'}</button>
+
+      {/* ── 지도 영역 ── */}
+      <div ref={mapContainer} style={{flex:1,position:'relative'}}/>
+
+      {/* ── 상단 모드 표시 배지 ── */}
+      <div style={{
+        position:'absolute',top:16,left:'50%',transform:'translateX(-50%)',zIndex:10,
+        background:'rgba(26,35,50,0.9)',backdropFilter:'blur(8px)',
+        padding:'8px 20px',borderRadius:20,border:'1px solid #334155',
+        fontSize:12,fontWeight:600,display:'flex',alignItems:'center',gap:8
+      }}>
+        <span style={{width:8,height:8,borderRadius:'50%',background:reportMode?'var(--danger)':'var(--safe)',
+          boxShadow:reportMode?'0 0 8px var(--danger)':'0 0 8px var(--safe)'}}/>
+        {reportMode ? '신고 모드 — 지도를 클릭하세요' : `${MAP_MODES.find(m=>m.id===mapMode)?.label} 활성`}
+      </div>
+
+      {/* ── 수식 설명 오버레이 ── */}
+      <div style={{
+        position:'absolute',bottom:16,right:16,zIndex:10,
+        background:'rgba(26,35,50,0.9)',backdropFilter:'blur(8px)',
+        padding:'12px 16px',borderRadius:10,border:'1px solid #334155',
+        fontSize:11,lineHeight:1.6,maxWidth:280
+      }}>
+        <span style={{fontWeight:700,color:'var(--accent)'}}>P(A|B)</span>
+        <span style={{color:'var(--muted)'}}> = </span>
+        <span style={{color:'var(--text)'}}>P(B|A)·P(A) / P(B)</span>
+        <div style={{color:'var(--muted)',marginTop:4,fontSize:10}}>
+          Prior(공공데이터) × Likelihood(주민신고) → Posterior(사각지대 확률)
+        </div>
+      </div>
+
+      <style jsx global>{`
+        .mapboxgl-popup-content { background:transparent!important; padding:0!important; box-shadow:none!important; }
+        .mapboxgl-popup-tip { border-top-color:#1a2332!important; }
+        @keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.3)} }
+      `}</style>
+    </div>
   )
 }

@@ -1,13 +1,13 @@
-@tailwind base;@tailwind components;@tailwind utilities;
-* { margin:0; padding:0; box-sizing:border-box; }
-html, body { height:100%; font-family:'Pretendard','Noto Sans KR',sans-serif; }
-:root {
-  --navy: #0f1729;
-  --panel: #1a2332;
-  --accent: #3b82f6;
-  --danger: #ef4444;
-  --warning: #f59e0b;
-  --safe: #10b981;
-  --text: #e2e8f0;
-  --muted: #94a3b8;
+import "./globals.css"
+export const metadata = {
+  title: "마을 안전 사각지대 예측 지도",
+  description: "베이지안 추론 기반 생활 안전 사각지대 동적 예측 및 PGIS 매핑 시스템",
+}
+export default function RootLayout({ children }) {
+  return (
+    <html lang="ko"><head>
+      <link href="https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.css" rel="stylesheet"/>
+      <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" rel="stylesheet"/>
+    </head><body>{children}</body></html>
+  )
 }
