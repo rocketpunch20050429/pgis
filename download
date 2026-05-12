@@ -1,1 +1,3 @@
-NEXT_PUBLIC_MAPBOX_TOKEN=pk.eyJ1IjoiZXhhbXBsZSIsImEiOiJjbGV4YW1wbGUifQ.example
+node_modules
+.next
+.env.local
