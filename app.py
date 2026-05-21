@@ -665,7 +665,7 @@ APP_HTML = r"""
         <div class="legend-wrap">
           <div class="legend-title" id="legendTitle">범례 — 진단 지도</div>
           <div id="legendBody"></div>
-          <div class="footnote">50m×50m 헥사곤 격자 · 베이지안 업데이트<br />서울특별시 종로구 일대</div>
+          <div class="footnote">50m×50m 헥사곤 격자 · 베이지안 업데이트<br />서울특별시 종로구 중심 확장권역</div>
         </div>
       </div>
     </aside>
@@ -690,7 +690,9 @@ APP_HTML = r"""
   <script src="https://cdn.jsdelivr.net/npm/@turf/turf@7/turf.min.js"></script>
   <script>
     const CENTER = [126.9784, 37.5703];
-    const ZOOM = 15;
+    const ZOOM = 14;
+    const ANALYSIS_LNG_RADIUS = 0.018;
+    const ANALYSIS_LAT_RADIUS = 0.014;
 
     const TYPE_META = {
       "조명 부족": { color: "#f59e0b", icon: "💡" },
@@ -809,7 +811,12 @@ APP_HTML = r"""
     }
 
     function getHexGrid() {
-      const bbox = [CENTER[0] - 0.008, CENTER[1] - 0.006, CENTER[0] + 0.008, CENTER[1] + 0.006];
+      const bbox = [
+        CENTER[0] - ANALYSIS_LNG_RADIUS,
+        CENTER[1] - ANALYSIS_LAT_RADIUS,
+        CENTER[0] + ANALYSIS_LNG_RADIUS,
+        CENTER[1] + ANALYSIS_LAT_RADIUS,
+      ];
       return turf.hexGrid(bbox, 0.05, { units: "kilometers" });
     }
 
