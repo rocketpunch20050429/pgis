@@ -460,7 +460,11 @@ APP_HTML = r"""
       flex: 1;
       height: 100%;
       min-width: 0;
-      background: #08111f;
+      background: #dbeafe;
+    }
+
+    .leaflet-tile-pane {
+      filter: saturate(1.14) contrast(1.02);
     }
 
     .top-badge {
@@ -762,7 +766,7 @@ APP_HTML = r"""
     const MAPBOX_TOKEN = __MAPBOX_TOKEN__;
     const tileOptions = MAPBOX_TOKEN
       ? {
-          url: `https://api.mapbox.com/styles/v1/mapbox/dark-v11/tiles/{z}/{x}/{y}?access_token=${MAPBOX_TOKEN}`,
+          url: `https://api.mapbox.com/styles/v1/mapbox/streets-v12/tiles/{z}/{x}/{y}?access_token=${MAPBOX_TOKEN}`,
           options: {
             attribution: "&copy; Mapbox &copy; OpenStreetMap",
             tileSize: 512,
@@ -771,7 +775,7 @@ APP_HTML = r"""
           },
         }
       : {
-          url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+          url: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
           options: {
             attribution: "&copy; OpenStreetMap &copy; CARTO",
             subdomains: "abcd",
@@ -875,7 +879,7 @@ APP_HTML = r"""
     function getHexStyle(feature) {
       const p = feature.properties;
       let fillColor = "#fbbf24";
-      let fillOpacity = 0.55;
+      let fillOpacity = 0.44;
 
       if (mapMode === "diagnostic") {
         fillColor = interpolateColor(p.variation, [
@@ -887,7 +891,7 @@ APP_HTML = r"""
         ]);
       } else if (mapMode === "uncertainty") {
         fillColor = p.confidence === "high" ? "#3b82f6" : p.confidence === "medium" ? "#60a5fa" : "#1e3a5f";
-        fillOpacity = p.confidence === "high" ? 0.70 : p.confidence === "medium" ? 0.45 : 0.15;
+        fillOpacity = p.confidence === "high" ? 0.58 : p.confidence === "medium" ? 0.38 : 0.14;
       } else {
         fillColor = interpolateColor(p.posterior, [
           [0, "#064e3b"],
