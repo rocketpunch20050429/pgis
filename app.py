@@ -3,6 +3,12 @@ import os
 
 import streamlit as st
 import urllib.parse
+try:
+  import streamlit.components.v1 as components
+  _HAS_COMPONENTS = True
+except Exception:
+  components = None
+  _HAS_COMPONENTS = False
 
 
 st.set_page_config(
@@ -1306,7 +1312,15 @@ APP_HTML = r"""
 html_payload = APP_HTML.replace("__MAPBOX_TOKEN__", json.dumps(MAPBOX_TOKEN)).replace(
   "__INITIAL_REPORTS__", json.dumps(initial_reports) if initial_reports is not None else "null"
 )
-# Use srcdoc in an iframe to embed the full HTML reliably inside Streamlit
-safe_srcdoc = html_payload.replace('"', '&quot;')
-iframe_html = f'<iframe srcdoc="{safe_srcdoc}" style="width:100%;height:900px;border:0;" sandbox="allow-scripts allow-same-origin"></iframe>'
-st.markdown(iframe_html, unsafe_allow_html=True)
+if _HAS_COMPONENTS:
+  try:
+    components.html(html_payload, height=900, scrolling=False)
+  except Exception:
+    safe_srcdoc = html_payload.replace('"', '&quot;')
+    iframe_html = f'<iframe srcdoc="{safe_srcdoc}" style="width:100%;height:900px;border:0;" sandbox="allow-scripts allow-same-origin"></iframe>'
+    st.markdown(iframe_html, unsafe_allow_html=True)
+else:
+  # Fallback to srcdoc iframe
+  safe_srcdoc = html_payload.replace('"', '&quot;')
+  iframe_html = f'<iframe srcdoc="{safe_srcdoc}" style="width:100%;height:900px;border:0;" sandbox="allow-scripts allow-same-origin"></iframe>'
+  st.markdown(iframe_html, unsafe_allow_html=True)
