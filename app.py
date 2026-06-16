@@ -1312,15 +1312,57 @@ APP_HTML = r"""
 html_payload = APP_HTML.replace("__MAPBOX_TOKEN__", json.dumps(MAPBOX_TOKEN)).replace(
   "__INITIAL_REPORTS__", json.dumps(initial_reports) if initial_reports is not None else "null"
 )
+
+# Try to use components.html when available and working; otherwise serve the HTML
+# via a local HTTP server and embed with st.iframe to avoid srcdoc/data URL issues.
+served_ok = False
 if _HAS_COMPONENTS:
   try:
     components.html(html_payload, height=900, scrolling=False)
+    served_ok = True
   except Exception:
-    safe_srcdoc = html_payload.replace('"', '&quot;')
-    iframe_html = f'<iframe srcdoc="{safe_srcdoc}" style="width:100%;height:900px;border:0;" sandbox="allow-scripts allow-same-origin"></iframe>'
-    st.markdown(iframe_html, unsafe_allow_html=True)
-else:
-  # Fallback to srcdoc iframe
-  safe_srcdoc = html_payload.replace('"', '&quot;')
-  iframe_html = f'<iframe srcdoc="{safe_srcdoc}" style="width:100%;height:900px;border:0;" sandbox="allow-scripts allow-same-origin"></iframe>'
-  st.markdown(iframe_html, unsafe_allow_html=True)
+    served_ok = False
+
+if not served_ok:
+  # write embed file
+  try:
+    import socket
+    from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
+    import functools
+
+    embed_dir = os.path.join(os.path.dirname(__file__), "_embed")
+    os.makedirs(embed_dir, exist_ok=True)
+    embed_path = os.path.join(embed_dir, "embed.html")
+    with open(embed_path, "w", encoding="utf-8") as f:
+      f.write(html_payload)
+
+    # start server thread if not already started
+    if not hasattr(globals(), "_embed_server_thread") or globals().get("_embed_server_thread") is None:
+      def _serve():
+        try:
+          handler = functools.partial(SimpleHTTPRequestHandler, directory=embed_dir)
+          server = ThreadingHTTPServer(("127.0.0.1", 8502), handler)
+          server.serve_forever()
+        except Exception:
+          pass
+
+      t = None
+      try:
+        t = __import__("threading").Thread(target=_serve, daemon=True)
+        t.start()
+        globals()["_embed_server_thread"] = t
+      except Exception:
+        t = None
+        globals()["_embed_server_thread"] = None
+
+    # embed via iframe pointing to local server
+    iframe_src = "http://127.0.0.1:8502/embed.html"
+    try:
+      st.iframe(iframe_src, height=900)
+    except Exception:
+      # fallback to markdown iframe
+      iframe_html = f'<iframe src="{iframe_src}" style="width:100%;height:900px;border:0;" sandbox="allow-scripts allow-same-origin"></iframe>'
+      st.markdown(iframe_html, unsafe_allow_html=True)
+  except Exception:
+    # last fallback: render as plain markdown (best-effort)
+    st.markdown("앱을 로드할 수 없습니다.", unsafe_allow_html=True)
