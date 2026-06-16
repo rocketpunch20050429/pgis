@@ -1297,9 +1297,9 @@ with st.sidebar:
                         st.write(f"  - {error}")
                 else:
                     # Process and store data
-                    df["description"] = df.get("description", "데이터 업로드")
+                    df["description"] = df.get("description", "").fillna("데이터 업로드")
                     df["time"] = datetime.now().strftime("%H:%M")
-                    df["id"] = df.index + 10000  # Start from 10000 to avoid conflicts
+                    df["id"] = range(10000, 10000 + len(df))
                     
                     # Select and reorder columns
                     display_cols = ["id", "latitude", "longitude", "type", "intensity", "description", "time"]
@@ -1332,12 +1332,17 @@ for i, record in enumerate(st.session_state.uploaded_records):
         "desc": record["description"],
     })
 
+# Build JS array string
+js_reports_str = ""
+if uploaded_data_js:
+    for item in uploaded_data_js:
+        js_reports_str += f'      {{ id: {item["id"]}, lng: {item["lng"]}, lat: {item["lat"]}, type: "{item["type"]}", intensity: {item["intensity"]}, time: "{item["time"]}", desc: "{item["desc"]}" }},\n'
+
 # Inject uploaded data into JavaScript
-APP_HTML_MODIFIED = APP_HTML.replace(
-    "      { id: 12, lng: 126.9820, lat: 37.5680, type: \"도로 파손\", intensity: 4, time: \"09:30\", desc: \"보도블럭 융기\" },",
-    "      { id: 12, lng: 126.9820, lat: 37.5680, type: \"도로 파손\", intensity: 4, time: \"09:30\", desc: \"보도블럭 융기\" }," + 
-    json.dumps(uploaded_data_js).replace("]", "").replace("[", "").replace("}, {", "},\n      {").lstrip("[") if uploaded_data_js else ""
-)
+insert_point = 'let reports = [\n      { id: 1, lng: 126.9751, lat: 37.5720, type: "조명 부족", intensity: 4, time: "22:30", desc: "골목 안쪽 가로등 고장" },'
+replacement = f'let reports = [\n      {{ id: 1, lng: 126.9751, lat: 37.5720, type: "조명 부족", intensity: 4, time: "22:30", desc: "골목 안쪽 가로등 고장" }},\n{js_reports_str}'
+
+APP_HTML_MODIFIED = APP_HTML.replace(insert_point, replacement.rstrip(',\n'))
 
 components.html(
     APP_HTML_MODIFIED.replace("__MAPBOX_TOKEN__", json.dumps(MAPBOX_TOKEN)),
