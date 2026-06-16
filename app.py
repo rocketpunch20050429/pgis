@@ -1,6 +1,8 @@
 import json
 import os
+from datetime import datetime
 
+import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
 
@@ -9,7 +11,7 @@ st.set_page_config(
     page_title="마을 안전 사각지대 예측 지도",
     page_icon="📍",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
 )
 #
 st.markdown(
@@ -55,12 +57,12 @@ APP_HTML = r"""
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" />
   <style>
     :root {
-      --navy: #07111f;
-      --panel: #1a2332;
-      --text: #e2e8f0;
-      --muted: #94a3b8;
-      --line: #334155;
-      --accent: #3b82f6;
+      --navy: #f0f4f8;
+      --panel: #ffffff;
+      --text: #1e293b;
+      --muted: #64748b;
+      --line: #e2e8f0;
+      --accent: #2563eb;
       --warning: #f59e0b;
       --danger: #ef4444;
       --safe: #10b981;
@@ -73,7 +75,7 @@ APP_HTML = r"""
       width: 100%;
       height: 100%;
       overflow: hidden;
-      background: var(--navy);
+      background: #ffffff;
       font-family: "Pretendard", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       color: var(--text);
     }
@@ -88,7 +90,7 @@ APP_HTML = r"""
       height: 900px;
       min-height: 720px;
       position: relative;
-      background: var(--navy);
+      background: #f8fafc;
       overflow: hidden;
     }
 
@@ -98,8 +100,8 @@ APP_HTML = r"""
       height: 100%;
       display: flex;
       flex-direction: column;
-      background: var(--panel);
-      border-right: 1px solid var(--line);
+      background: #ffffff;
+      border-right: 1px solid #e2e8f0;
       transition: width 0.28s ease, min-width 0.28s ease;
       position: relative;
       z-index: 10;
@@ -163,8 +165,8 @@ APP_HTML = r"""
 
     .stat-card {
       min-height: 66px;
-      background: #0f1729;
-      border: 1px solid rgba(51, 65, 85, 0.45);
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
       border-radius: 8px;
       padding: 11px 8px;
       text-align: center;
@@ -208,7 +210,7 @@ APP_HTML = r"""
       display: block;
       margin-bottom: 6px;
       padding: 10px 14px;
-      border: 1px solid var(--line);
+      border: 1px solid #e2e8f0;
       border-radius: 8px;
       background: transparent;
       color: var(--text);
@@ -218,8 +220,8 @@ APP_HTML = r"""
     }
 
     .mode-button.active {
-      border-color: var(--accent);
-      background: rgba(59, 130, 246, 0.12);
+      border-color: #2563eb;
+      background: rgba(37, 99, 235, 0.1);
     }
 
     .mode-label {
@@ -263,8 +265,8 @@ APP_HTML = r"""
     }
 
     .inner-card {
-      background: #0f1729;
-      border: 1px solid rgba(51, 65, 85, 0.45);
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
       border-radius: 8px;
       padding: 16px;
     }
@@ -305,9 +307,9 @@ APP_HTML = r"""
       min-height: 34px;
       margin-bottom: 8px;
       padding: 8px;
-      border: 1px solid var(--line);
+      border: 1px solid #e2e8f0;
       border-radius: 6px;
-      background: var(--panel);
+      background: #ffffff;
       color: var(--text);
       font-size: 12px;
       outline: none;
@@ -336,7 +338,7 @@ APP_HTML = r"""
       height: 30px;
       border: 0;
       border-radius: 6px;
-      background: var(--line);
+      background: #cbd5e1;
       color: white;
       cursor: pointer;
       font-size: 12px;
@@ -348,7 +350,7 @@ APP_HTML = r"""
       justify-content: space-between;
       gap: 12px;
       padding: 7px 0;
-      border-bottom: 1px solid #1e293b;
+      border-bottom: 1px solid #e2e8f0;
     }
 
     .analysis-label {
@@ -444,10 +446,10 @@ APP_HTML = r"""
       align-items: center;
       justify-content: center;
       transform: translateY(-50%);
-      border: 1px solid var(--line);
+      border: 1px solid #e2e8f0;
       border-left: 0;
       border-radius: 0 8px 8px 0;
-      background: var(--panel);
+      background: #ffffff;
       color: var(--text);
       cursor: pointer;
       font-size: 16px;
@@ -460,7 +462,7 @@ APP_HTML = r"""
       flex: 1;
       height: 100%;
       min-width: 0;
-      background: #dbeafe;
+      background: #e0f2fe;
     }
 
     .leaflet-tile-pane {
@@ -478,15 +480,16 @@ APP_HTML = r"""
       transform: translateX(-50%);
       max-width: calc(100% - 420px);
       padding: 8px 20px;
-      border: 1px solid var(--line);
+      border: 1px solid #e2e8f0;
       border-radius: 999px;
-      background: rgba(26, 35, 50, 0.90);
+      background: rgba(255, 255, 255, 0.95);
       backdrop-filter: blur(8px);
       font-size: 12px;
       font-weight: 750;
       line-height: 1.2;
       white-space: nowrap;
       pointer-events: none;
+      color: var(--text);
     }
 
     .status-dot {
@@ -504,13 +507,14 @@ APP_HTML = r"""
       width: 280px;
       max-width: calc(100% - 32px);
       padding: 12px 16px;
-      border: 1px solid var(--line);
+      border: 1px solid #e2e8f0;
       border-radius: 8px;
-      background: rgba(26, 35, 50, 0.90);
+      background: rgba(255, 255, 255, 0.95);
       backdrop-filter: blur(8px);
       font-size: 11px;
       line-height: 1.6;
       pointer-events: none;
+      color: var(--text);
     }
 
     .formula-note {
@@ -521,9 +525,9 @@ APP_HTML = r"""
     }
 
     .leaflet-control-zoom a {
-      background: var(--panel) !important;
+      background: #ffffff !important;
       color: var(--text) !important;
-      border-color: var(--line) !important;
+      border-color: #e2e8f0 !important;
     }
 
     .leaflet-popup-content-wrapper,
@@ -596,7 +600,7 @@ APP_HTML = r"""
         <div class="panel-header">
           <div class="eyebrow">BAYESIAN PGIS</div>
           <h1>마을 안전 사각지대<br />예측 지도</h1>
-          <p class="subtitle">베이지안 추론 기반 동적 위험 예측 시스템</p>
+          <p class="subtitle">주민 신고와 공공데이터를 바탕으로 한 위험지역 예측 시스템</p>
         </div>
 
         <div class="panel-scroll">
@@ -611,7 +615,7 @@ APP_HTML = r"""
             </div>
             <div class="stat-card">
               <div class="stat-value" style="color: var(--danger);"><span id="blindspots">0</span><span>격자</span></div>
-              <div class="stat-label">사각지대</div>
+              <div class="stat-label">위험 지역 수</div>
             </div>
           </div>
 
@@ -644,17 +648,17 @@ APP_HTML = r"""
               </div>
               <div class="form-location" id="reportLocation"></div>
               <select class="field" id="reportType"></select>
-              <div class="field-label">심리적 공포 수치</div>
+              <div class="field-label">위험 정도 (1:약함 ~ 5:심각함)</div>
               <div class="intensity-row" id="intensityButtons"></div>
               <textarea class="field" id="reportDesc" placeholder="상세 설명 (선택)"></textarea>
-              <button class="primary-button" id="submitReport">신고 제출 → 베이즈 업데이트</button>
+              <button class="primary-button" id="submitReport">신고 제출 → 지도 업데이트</button>
             </div>
           </div>
 
           <div class="section" id="selectedHexSection" style="display: none;">
             <div class="inner-card">
               <div class="card-head">
-                <span>📊 격자 베이지안 분석</span>
+                <span>📊 이 지역의 위험 분석</span>
                 <button class="icon-button" id="closeHexInfo" title="닫기">✕</button>
               </div>
               <div id="selectedHexBody"></div>
@@ -665,7 +669,7 @@ APP_HTML = r"""
         <div class="legend-wrap">
           <div class="legend-title" id="legendTitle">범례 — 진단 지도</div>
           <div id="legendBody"></div>
-          <div class="footnote">150m 헥사곤 격자 · 베이지안 업데이트<br />서울특별시 전체 분석권역</div>
+          <div class="footnote">150m 단위 격자 분석 · 실시간 업데이트<br />서울특별시 전체 분석권역</div>
         </div>
       </div>
     </aside>
@@ -675,14 +679,14 @@ APP_HTML = r"""
 
     <div class="top-badge">
       <span class="status-dot" id="statusDot"></span>
-      <span id="statusText">진단 지도 활성</span>
+      <span id="statusText">위험 변화 지도 활성</span>
     </div>
 
     <div class="formula">
-      <span style="font-weight: 800; color: var(--accent);">P(A|B)</span>
+      <span style="font-weight: 800; color: var(--accent);">위험도 계산</span>
       <span style="color: var(--muted);"> = </span>
-      <span>P(B|A)·P(A) / P(B)</span>
-      <div class="formula-note">Prior(공공데이터) × Likelihood(주민신고) → Posterior(사각지대 확률)</div>
+      <span>기본 위험도 × 신고량 반영</span>
+      <div class="formula-note">공공데이터(기초) + 주민신고(가중치) = 최종 위험도</div>
     </div>
   </div>
 
@@ -692,7 +696,7 @@ APP_HTML = r"""
     const CENTER = [126.9780, 37.5665];
     const ZOOM = 11;
     const SEOUL_BBOX = [126.7640, 37.4130, 127.1840, 37.7150];
-    const HEX_CELL_SIZE_KM = 0.15;
+    const GRID_CELL_SIZE_KM = 0.15;
 
     const TYPE_META = {
       "조명 부족": { color: "#f59e0b", icon: "💡" },
@@ -811,7 +815,7 @@ APP_HTML = r"""
     }
 
     function getHexGrid() {
-      return turf.hexGrid(SEOUL_BBOX, HEX_CELL_SIZE_KM, { units: "kilometers" });
+      return turf.squareGrid(SEOUL_BBOX, GRID_CELL_SIZE_KM, { units: "kilometers" });
     }
 
     function computeBayesian(sourceReports, sourceHexGrid) {
@@ -929,10 +933,10 @@ APP_HTML = r"""
     function markerPopup(report) {
       const dots = "🔴".repeat(report.intensity) + "⚪".repeat(5 - report.intensity);
       return `
-        <div style="background:#1a2332;color:#e2e8f0;padding:12px;border-radius:8px;min-width:180px;border:1px solid #334155;">
+        <div style="background:#ffffff;color:#1e293b;padding:12px;border-radius:8px;min-width:180px;border:1px solid #e2e8f0;box-shadow:0 2px 8px rgba(0,0,0,0.1);">
           <div style="font-weight:800;font-size:14px;margin-bottom:6px;">${escapeHtml(report.type)}</div>
-          <div style="font-size:12px;color:#94a3b8;margin-bottom:4px;">📍 ${escapeHtml(report.desc)}</div>
-          <div style="font-size:12px;color:#94a3b8;">🕐 ${escapeHtml(report.time)} · 위험도 ${dots}</div>
+          <div style="font-size:12px;color:#64748b;margin-bottom:4px;">📍 ${escapeHtml(report.desc)}</div>
+          <div style="font-size:12px;color:#64748b;">🕐 ${escapeHtml(report.time)} · 위험도 ${dots}</div>
         </div>
       `;
     }
@@ -1200,8 +1204,143 @@ APP_HTML = r"""
 </html>
 """
 
+# Initialize session state for uploaded data
+if "uploaded_records" not in st.session_state:
+    st.session_state.uploaded_records = []
+
+# Sidebar for data upload
+with st.sidebar:
+    st.markdown("---")
+    st.markdown("### 📤 데이터 업로드")
+    
+    st.markdown("""
+    **지원하는 파일 형식:**
+    - CSV, Excel (.xlsx, .xls)
+    
+    **필수 컬럼:**
+    - `latitude` 또는 `위도`: 위도
+    - `longitude` 또는 `경도`: 경도
+    - `type` 또는 `종류`: 위험 유형
+    - `intensity` 또는 `위험도`: 위험 정도 (1-5)
+    - `description` 또는 `설명`: 상세 설명 (선택)
+    """)
+    
+    uploaded_file = st.file_uploader(
+        "파일 업로드",
+        type=["csv", "xlsx", "xls"],
+        key="hazard_uploader",
+    )
+    
+    if uploaded_file:
+        try:
+            # Read the file
+            if uploaded_file.name.endswith(".csv"):
+                df = pd.read_csv(uploaded_file)
+            else:
+                df = pd.read_excel(uploaded_file)
+            
+            # Normalize column names
+            df.columns = df.columns.str.strip().str.lower()
+            
+            # Map Korean column names to English
+            column_mapping = {
+                "위도": "latitude",
+                "경도": "longitude",
+                "종류": "type",
+                "위험도": "intensity",
+                "설명": "description",
+            }
+            df = df.rename(columns=column_mapping)
+            
+            # Validate required columns
+            required_cols = ["latitude", "longitude", "type", "intensity"]
+            missing_cols = [col for col in required_cols if col not in df.columns]
+            
+            if missing_cols:
+                st.error(f"❌ 필수 컬럼 누락: {', '.join(missing_cols)}")
+            else:
+                # Validate data types and ranges
+                errors = []
+                
+                # Check latitude/longitude
+                try:
+                    df["latitude"] = pd.to_numeric(df["latitude"], errors="coerce")
+                    df["longitude"] = pd.to_numeric(df["longitude"], errors="coerce")
+                    if df["latitude"].isna().any() or df["longitude"].isna().any():
+                        errors.append("위도/경도: 숫자 형식이어야 합니다")
+                    # Seoul bounds check
+                    if not ((df["latitude"] >= 37.41) & (df["latitude"] <= 37.72)).all():
+                        errors.append("위도: 37.41 ~ 37.72 범위여야 합니다 (서울)")
+                    if not ((df["longitude"] >= 126.76) & (df["longitude"] <= 127.18)).all():
+                        errors.append("경도: 126.76 ~ 127.18 범위여야 합니다 (서울)")
+                except Exception as e:
+                    errors.append(f"위도/경도 변환 오류: {str(e)}")
+                
+                # Check intensity
+                try:
+                    df["intensity"] = pd.to_numeric(df["intensity"], errors="coerce")
+                    if df["intensity"].isna().any():
+                        errors.append("위험도: 숫자 형식이어야 합니다")
+                    if not ((df["intensity"] >= 1) & (df["intensity"] <= 5)).all():
+                        errors.append("위험도: 1~5 범위여야 합니다")
+                except Exception as e:
+                    errors.append(f"위험도 변환 오류: {str(e)}")
+                
+                # Check type
+                valid_types = ["조명 부족", "시야 차단", "도로 파손", "불법 주정차"]
+                if not df["type"].isin(valid_types).all():
+                    errors.append(f"유형: {', '.join(valid_types)} 중 선택")
+                
+                if errors:
+                    st.error("❌ 데이터 검증 오류:")
+                    for error in errors:
+                        st.write(f"  - {error}")
+                else:
+                    # Process and store data
+                    df["description"] = df.get("description", "데이터 업로드")
+                    df["time"] = datetime.now().strftime("%H:%M")
+                    df["id"] = df.index + 10000  # Start from 10000 to avoid conflicts
+                    
+                    # Select and reorder columns
+                    display_cols = ["id", "latitude", "longitude", "type", "intensity", "description", "time"]
+                    df_display = df[[col for col in display_cols if col in df.columns]]
+                    
+                    st.session_state.uploaded_records = df[["latitude", "longitude", "type", "intensity", "time", "description"]].to_dict("records")
+                    
+                    st.success(f"✅ {len(st.session_state.uploaded_records)}개 레코드 업로드 완료!")
+                    
+                    st.markdown("**업로드된 데이터 미리보기:**")
+                    st.dataframe(df_display, use_container_width=True, hide_index=True)
+                    
+                    if st.button("🗑️ 업로드 데이터 초기화"):
+                        st.session_state.uploaded_records = []
+                        st.rerun()
+        
+        except Exception as e:
+            st.error(f"❌ 파일 처리 오류: {str(e)}")
+
+# Convert uploaded records to JavaScript format
+uploaded_data_js = []
+for i, record in enumerate(st.session_state.uploaded_records):
+    uploaded_data_js.append({
+        "id": 9000 + i,
+        "lng": float(record["longitude"]),
+        "lat": float(record["latitude"]),
+        "type": record["type"],
+        "intensity": int(record["intensity"]),
+        "time": record["time"],
+        "desc": record["description"],
+    })
+
+# Inject uploaded data into JavaScript
+APP_HTML_MODIFIED = APP_HTML.replace(
+    "      { id: 12, lng: 126.9820, lat: 37.5680, type: \"도로 파손\", intensity: 4, time: \"09:30\", desc: \"보도블럭 융기\" },",
+    "      { id: 12, lng: 126.9820, lat: 37.5680, type: \"도로 파손\", intensity: 4, time: \"09:30\", desc: \"보도블럭 융기\" }," + 
+    json.dumps(uploaded_data_js).replace("]", "").replace("[", "").replace("}, {", "},\n      {").lstrip("[") if uploaded_data_js else ""
+)
+
 components.html(
-    APP_HTML.replace("__MAPBOX_TOKEN__", json.dumps(MAPBOX_TOKEN)),
+    APP_HTML_MODIFIED.replace("__MAPBOX_TOKEN__", json.dumps(MAPBOX_TOKEN)),
     height=900,
     scrolling=False,
 )
