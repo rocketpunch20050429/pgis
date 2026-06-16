@@ -1,5 +1,5 @@
 """
-Bayesian PGIS 서울 중구 안전지도 - 주소 기반 동 분할 + 프로페셔널 디자인
+Bayesian PGIS 서울 중구 안전지도 - 지도 클릭 직접 입력
 """
 
 import json
@@ -25,7 +25,7 @@ JUNGGU_BOUNDS = {
 GRID_SIZE_M = 300
 REPORTS_FILE = os.path.join(os.path.dirname(__file__), "reports.json")
 
-# ========== 중구 행정동 데이터 (주소 기반) ==========
+# ========== 중구 행정동 데이터 ==========
 JUNGGU_DONGS = {
     "명동": {
         "bounds": {"north": 37.5680, "south": 37.5600, "east": 127.0010, "west": 126.9850},
@@ -79,17 +79,11 @@ JUNGGU_DONGS = {
     },
 }
 
-REPORTS_FILE = os.path.join(os.path.dirname(__file__), "reports.json")
-
-# ========== CSS 스타일 (프로페셔널 디자인) ==========
+# ========== CSS 스타일 ==========
 CUSTOM_CSS = """
 <style>
-    /* 메인 배경 */
-    .main {
-        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-    }
+    .main { background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); }
     
-    /* 헤더 스타일 */
     .header-main {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         color: white;
@@ -99,19 +93,9 @@ CUSTOM_CSS = """
         box-shadow: 0 10px 30px rgba(0,0,0,0.2);
     }
     
-    .header-main h1 {
-        margin: 0;
-        font-size: 2.5rem;
-        font-weight: 700;
-    }
+    .header-main h1 { margin: 0; font-size: 2.5rem; font-weight: 700; }
+    .header-main p { margin: 0.5rem 0 0 0; font-size: 1rem; opacity: 0.9; }
     
-    .header-main p {
-        margin: 0.5rem 0 0 0;
-        font-size: 1rem;
-        opacity: 0.9;
-    }
-    
-    /* 메트릭 카드 */
     .metric-card {
         background: white;
         padding: 1.5rem;
@@ -127,7 +111,17 @@ CUSTOM_CSS = """
         box-shadow: 0 8px 16px rgba(0,0,0,0.15);
     }
     
-    /* 섹션 제목 */
+    .click-alert {
+        background: linear-gradient(135deg, #fbbf24 0%, #f97316 100%);
+        color: white;
+        padding: 1.5rem;
+        border-radius: 8px;
+        margin-bottom: 1rem;
+        font-weight: 600;
+        text-align: center;
+        font-size: 1.1rem;
+    }
+    
     .section-title {
         color: #667eea;
         font-size: 1.5rem;
@@ -138,7 +132,6 @@ CUSTOM_CSS = """
         padding-bottom: 0.5rem;
     }
     
-    /* 카드 */
     .card {
         background: white;
         padding: 1.5rem;
@@ -147,7 +140,6 @@ CUSTOM_CSS = """
         margin-bottom: 1rem;
     }
     
-    /* 버튼 */
     .stButton > button {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         color: white;
@@ -164,25 +156,14 @@ CUSTOM_CSS = """
         transform: translateY(-2px);
     }
     
-    /* 데이터프레임 */
-    .dataframe {
-        border-radius: 8px;
-        overflow: hidden;
+    .success-msg {
+        background: #d1fae5;
+        border-left: 4px solid #10b981;
+        color: #065f46;
+        padding: 1rem;
+        border-radius: 6px;
+        margin-top: 1rem;
     }
-    
-    /* 위험도 레벨 배지 */
-    .risk-badge {
-        display: inline-block;
-        padding: 0.5rem 1rem;
-        border-radius: 20px;
-        font-weight: 600;
-        font-size: 0.9rem;
-    }
-    
-    .risk-low { background: #d1fae5; color: #065f46; }
-    .risk-mid { background: #fef3c7; color: #92400e; }
-    .risk-high { background: #fed7aa; color: #92400e; }
-    .risk-critical { background: #fee2e2; color: #991b1b; }
 </style>
 """
 
@@ -279,17 +260,6 @@ def get_color(value):
     else:
         return "#ef4444"
 
-def get_risk_level(value):
-    """위험도 레벨 텍스트"""
-    if value < 0.2:
-        return ("안전", "risk-low")
-    elif value < 0.4:
-        return ("주의", "risk-mid")
-    elif value < 0.6:
-        return ("위험", "risk-high")
-    else:
-        return ("매우 위험", "risk-critical")
-
 def load_reports():
     if os.path.exists(REPORTS_FILE):
         try:
@@ -317,18 +287,23 @@ if "grid" not in st.session_state:
     st.session_state.grid = create_grid()
 if "selected_dong" not in st.session_state:
     st.session_state.selected_dong = "전체"
+if "clicked_lat" not in st.session_state:
+    st.session_state.clicked_lat = None
+if "clicked_lng" not in st.session_state:
+    st.session_state.clicked_lng = None
+if "map_click_msg" not in st.session_state:
+    st.session_state.map_click_msg = False
 
 # ========== 메인 헤더 ==========
 st.markdown(f"""
 <div class="header-main">
     <h1>🗺️ 서울 중구 안전지도</h1>
-    <p>베이지안 정리 기반 | 주소별 동 분할 | {len(st.session_state.grid):,}개 격자 분석</p>
+    <p>베이지안 정리 기반 | 지도 클릭으로 신고하기 | {len(st.session_state.grid):,}개 격자 분석</p>
 </div>
 """, unsafe_allow_html=True)
 
 # ========== 메트릭 ==========
 col1, col2, col3, col4, col5 = st.columns(5)
-
 with col1:
     st.metric("📊 총 신고", len(st.session_state.reports), "건")
 with col2:
@@ -344,115 +319,146 @@ with col5:
 
 st.divider()
 
-# ========== 레이아웃 ==========
+# ========== 클릭 알림 ==========
+if st.session_state.map_click_msg:
+    st.markdown(f"""
+    <div class="click-alert">
+        ✅ 위치 선택 완료! 위도: {st.session_state.clicked_lat:.4f} / 경도: {st.session_state.clicked_lng:.4f}
+    </div>
+    """, unsafe_allow_html=True)
+
+# ========== 메인 레이아웃 ==========
 col_left, col_right = st.columns([1, 2.5])
 
+# ========== 좌측: 신고 폼 ==========
 with col_left:
-    st.markdown("### 📝 신고 관리")
+    st.markdown("### 📝 신고 작성")
     
     # 동 선택
     selected_dong = st.selectbox("📍 동 선택", ["전체"] + list(JUNGGU_DONGS.keys()))
     st.session_state.selected_dong = selected_dong
     
-    # 탭
-    tab1, tab2, tab3 = st.tabs(["신고", "업로드", "분석"])
+    st.markdown("---")
     
-    with tab1:
-        with st.form("report_form", border=True):
-            st.markdown("**새 신고 작성**")
-            report_type = st.selectbox("위험 유형", ["조명 부족", "시야 차단", "도로 파손", "불법 주정차", "기타"])
-            intensity = st.slider("위험도", 1, 5, 3, help="1: 안전 → 5: 매우 위험")
-            lat = st.number_input("위도", value=37.5630, format="%.4f")
-            lng = st.number_input("경도", value=126.9945, format="%.4f")
-            desc = st.text_area("상세 설명", max_chars=100, placeholder="예: 횡단보도 직전 조명 전부 고장...")
+    # 신고 폼
+    with st.form("report_form", border=True):
+        st.markdown("**새 신고 작성**")
+        
+        report_type = st.selectbox("위험 유형", ["조명 부족", "시야 차단", "도로 파손", "불법 주정차", "기타"])
+        intensity = st.slider("위험도", 1, 5, 3, help="1: 안전 → 5: 매우 위험")
+        
+        # 지도에서 클릭한 좌표가 있으면 사용, 없으면 기본값
+        default_lat = st.session_state.clicked_lat if st.session_state.clicked_lat else 37.5630
+        default_lng = st.session_state.clicked_lng if st.session_state.clicked_lng else 126.9945
+        
+        lat = st.number_input("위도", value=default_lat, format="%.4f", key="lat_input")
+        lng = st.number_input("경도", value=default_lng, format="%.4f", key="lng_input")
+        
+        desc = st.text_area("상세 설명", max_chars=100, placeholder="예: 횡단보도 직전 조명 전부 고장...")
+        
+        # 좌표가 선택되었으면 하이라이트
+        if st.session_state.clicked_lat and st.session_state.clicked_lng:
+            st.success(f"✅ 지도에서 선택된 위치")
+        else:
+            st.info("💡 오른쪽 지도에서 클릭하여 위치 선택!")
+        
+        if st.form_submit_button("📌 신고 등록", use_container_width=True):
+            dong = get_dong_by_coords(lat, lng)
+            st.session_state.reports.append({
+                "id": st.session_state.next_id,
+                "lng": lng,
+                "lat": lat,
+                "type": report_type,
+                "intensity": intensity,
+                "time": datetime.now().strftime("%m-%d %H:%M"),
+                "desc": desc,
+                "dong": dong,
+            })
+            st.session_state.next_id += 1
+            save_reports(st.session_state.reports)
             
-            if st.form_submit_button("📌 신고 등록", use_container_width=True):
-                dong = get_dong_by_coords(lat, lng)
-                st.session_state.reports.append({
-                    "id": st.session_state.next_id,
-                    "lng": lng,
-                    "lat": lat,
-                    "type": report_type,
-                    "intensity": intensity,
-                    "time": datetime.now().strftime("%m-%d %H:%M"),
-                    "desc": desc,
-                    "dong": dong,
-                })
-                st.session_state.next_id += 1
-                save_reports(st.session_state.reports)
-                st.success(f"✅ 신고 저장 | {dong}")
-                st.rerun()
+            # 클릭 상태 초기화
+            st.session_state.clicked_lat = None
+            st.session_state.clicked_lng = None
+            st.session_state.map_click_msg = False
+            
+            st.success(f"✅ 신고 저장 | {dong}")
+            st.rerun()
     
-    with tab2:
-        st.markdown("**데이터 업로드**")
-        uploaded = st.file_uploader("CSV/JSON 파일", type=["csv", "json"])
-        if uploaded and st.button("📤 업로드", use_container_width=True):
+    st.markdown("---")
+    
+    # 데이터 관리
+    st.markdown("### 📊 데이터 관리")
+    
+    col_a, col_b = st.columns(2)
+    with col_a:
+        if st.button("⬇️ CSV 내보내기", use_container_width=True):
+            if st.session_state.reports:
+                df = pd.DataFrame(st.session_state.reports)
+                csv = df.to_csv(index=False, encoding="utf-8-sig")
+                st.download_button(
+                    "다운로드",
+                    csv,
+                    f"reports_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                    "text/csv",
+                    use_container_width=True
+                )
+            else:
+                st.info("신고 데이터가 없습니다")
+    
+    with col_b:
+        if st.button("📤 CSV 업로드", use_container_width=True):
+            st.session_state.show_upload = True
+    
+    if st.session_state.get("show_upload", False):
+        uploaded = st.file_uploader("CSV 파일 선택", type=["csv"])
+        if uploaded and st.button("업로드 실행"):
             try:
-                if uploaded.name.endswith(".csv"):
-                    df = pd.read_csv(uploaded)
-                    for _, row in df.iterrows():
-                        lat, lng = float(row.get("lat", 37.5630)), float(row.get("lng", row.get("lon", 126.9945)))
-                        st.session_state.reports.append({
-                            "id": st.session_state.next_id,
-                            "lng": lng,
-                            "lat": lat,
-                            "type": str(row.get("type", "신고")),
-                            "intensity": int(row.get("intensity", 3)),
-                            "time": str(row.get("time", datetime.now().strftime("%m-%d %H:%M"))),
-                            "desc": str(row.get("desc", "")),
-                            "dong": get_dong_by_coords(lat, lng),
-                        })
-                        st.session_state.next_id += 1
-                else:
-                    data = json.load(uploaded)
-                    for item in data:
-                        if "id" not in item:
-                            item["id"] = st.session_state.next_id
-                            st.session_state.next_id += 1
-                        if "dong" not in item:
-                            item["dong"] = get_dong_by_coords(item.get("lat", 37.5630), item.get("lng", 126.9945))
-                    st.session_state.reports.extend(data)
+                df = pd.read_csv(uploaded)
+                for _, row in df.iterrows():
+                    lat = float(row.get("lat", 37.5630))
+                    lng = float(row.get("lng", row.get("lon", 126.9945)))
+                    st.session_state.reports.append({
+                        "id": st.session_state.next_id,
+                        "lng": lng,
+                        "lat": lat,
+                        "type": str(row.get("type", "신고")),
+                        "intensity": int(row.get("intensity", 3)),
+                        "time": str(row.get("time", datetime.now().strftime("%m-%d %H:%M"))),
+                        "desc": str(row.get("desc", "")),
+                        "dong": get_dong_by_coords(lat, lng),
+                    })
+                    st.session_state.next_id += 1
                 
                 save_reports(st.session_state.reports)
-                st.success(f"✅ {len(data if isinstance(data, list) else df)} 건 업로드")
+                st.success(f"✅ {len(df)} 건 업로드")
+                st.session_state.show_upload = False
                 st.rerun()
             except Exception as e:
                 st.error(f"오류: {e}")
     
-    with tab3:
-        st.markdown("**데이터 관리**")
-        col_a, col_b = st.columns(2)
-        with col_a:
-            if st.button("⬇️ CSV 내보내기", use_container_width=True):
-                if st.session_state.reports:
-                    df = pd.DataFrame(st.session_state.reports)
-                    csv = df.to_csv(index=False, encoding="utf-8-sig")
-                    st.download_button(
-                        "다운로드",
-                        csv,
-                        f"reports_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                        "text/csv",
-                        use_container_width=True
-                    )
-                else:
-                    st.info("신고 데이터가 없습니다")
-        
-        with col_b:
-            if st.button("🗑️ 전체 삭제", use_container_width=True, type="secondary"):
-                if st.session_state.reports:
-                    if st.checkbox("정말 삭제하시겠습니까?"):
-                        st.session_state.reports = []
-                        save_reports([])
-                        st.success("삭제됨")
-                        st.rerun()
+    col_c, col_d = st.columns(2)
+    with col_c:
+        if st.button("🔄 새로고침", use_container_width=True):
+            st.rerun()
+    
+    with col_d:
+        if st.button("🗑️ 전체 삭제", use_container_width=True, type="secondary"):
+            if st.session_state.reports and st.checkbox("정말 삭제?"):
+                st.session_state.reports = []
+                save_reports([])
+                st.success("삭제됨")
+                st.rerun()
 
+# ========== 우측: 지도 ==========
 with col_right:
     st.markdown("### 🎯 베이지안 위험도 지도")
+    st.markdown("💡 **지도를 클릭하여 신고 위치를 선택하세요!**", help="클릭한 좌표가 왼쪽 폼에 자동으로 입력됩니다")
     
     # 베이지안 계산
     bayesian_grid = bayesian_update(st.session_state.grid, st.session_state.reports)
     
-    # 지도
+    # 지도 생성
     m = folium.Map(location=JUNGGU_CENTER, zoom_start=13, tiles="OpenStreetMap")
     
     # 격자 표시
@@ -507,15 +513,23 @@ with col_right:
             fill=False,
             weight=2,
             label=dong_name,
-        ).add_to(b)
+        ).add_to(m)
     
-    st_folium(m, width=700, height=700)
+    # 지도 렌더링 및 클릭 처리
+    map_data = st_folium(m, width=700, height=700)
+    
+    # 클릭 이벤트 처리
+    if map_data and map_data.get("last_clicked"):
+        clicked = map_data["last_clicked"]
+        st.session_state.clicked_lat = clicked["lat"]
+        st.session_state.clicked_lng = clicked["lng"]
+        st.session_state.map_click_msg = True
+        st.rerun()
 
 # ========== 하단: 분석 ==========
 st.divider()
 st.markdown("### 📊 상세 분석")
 
-# 동별 분석
 if st.session_state.reports:
     col_chart1, col_chart2 = st.columns(2)
     
@@ -561,7 +575,7 @@ if st.session_state.reports:
         height=400,
     )
 else:
-    st.info("📌 아직 신고가 없습니다. 왼쪽 폼에서 신고를 등록해주세요.")
+    st.info("📌 아직 신고가 없습니다. 지도를 클릭하여 신고를 등록해주세요.")
 
 # ========== 푸터 ==========
 st.divider()
