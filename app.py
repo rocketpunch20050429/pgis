@@ -45,6 +45,47 @@ MAPBOX_TOKEN = (
     or ""
 )
 
+# 서버 측 저장 파일 경로 (앱 루트)
+SAVED_REPORTS_PATH = os.path.join(os.path.dirname(__file__), "reports.json")
+
+# 파일 업로드를 통해 서버에 보고서 저장 가능
+uploaded = st.file_uploader("신고 데이터 업로드 (JSON 또는 CSV)", type=["json", "csv"])
+if uploaded is not None:
+  try:
+    content = uploaded.read()
+    text = content.decode("utf-8")
+    if uploaded.name.lower().endswith(".csv"):
+      import csv
+      rows = list(csv.DictReader(text.splitlines()))
+      data = []
+      for r in rows:
+        # normalize keys
+        data.append({
+          "id": int(r.get("id") or 0),
+          "lng": float(r.get("lng") or r.get("lon") or 0),
+          "lat": float(r.get("lat") or 0),
+          "type": r.get("type") or r.get("category") or "신고",
+          "intensity": int(r.get("intensity") or 3),
+          "time": r.get("time") or "00:00",
+          "desc": r.get("desc") or r.get("description") or "",
+        })
+    else:
+      data = json.loads(text)
+    with open(SAVED_REPORTS_PATH, "w", encoding="utf-8") as f:
+      json.dump(data, f, ensure_ascii=False)
+    st.success("신고 데이터가 서버에 저장되었습니다. 페이지를 새로고침하면 반영됩니다.")
+  except Exception as e:
+    st.error(f"업로드 처리 중 오류: {e}")
+
+# 초기 로드용 서버 저장본이 있으면 읽어서 JS로 전달
+initial_reports = None
+if os.path.exists(SAVED_REPORTS_PATH):
+  try:
+    with open(SAVED_REPORTS_PATH, "r", encoding="utf-8") as f:
+      initial_reports = json.load(f)
+  except Exception:
+    initial_reports = None
+
 APP_HTML = r"""
 <!DOCTYPE html>
 <html lang="ko">
@@ -635,6 +676,7 @@ APP_HTML = r"""
 
           <div class="section">
             <button class="primary-button" id="reportModeButton">📍 위험 지점 신고하기</button>
+            <button class="primary-button" id="exportReports" style="margin-top:8px;background:#64748b;">⬇️ 신고 내역 내보내기</button>
             <p class="hint" id="reportHint" style="display: none;">지도에서 위험 지점을 클릭하세요</p>
           </div>
 
@@ -709,7 +751,7 @@ APP_HTML = r"""
       posterior: { label: "최종 위험도 지도", desc: "종합 위험도" },
     };
 
-    let reports = [
+    let reports = __INITIAL_REPORTS__ || [
       { id: 1, lng: 126.9751, lat: 37.5720, type: "조명 부족", intensity: 4, time: "22:30", desc: "골목 안쪽 가로등 고장" },
       { id: 2, lng: 126.9800, lat: 37.5695, type: "시야 차단", intensity: 5, time: "19:00", desc: "담벼락으로 시야 완전 차단" },
       { id: 3, lng: 126.9770, lat: 37.5680, type: "도로 파손", intensity: 3, time: "08:15", desc: "인도 블록 파손" },
@@ -723,6 +765,15 @@ APP_HTML = r"""
       { id: 11, lng: 126.9755, lat: 37.5690, type: "조명 부족", intensity: 3, time: "20:00", desc: "골목 조명 흐림" },
       { id: 12, lng: 126.9820, lat: 37.5680, type: "도로 파손", intensity: 4, time: "09:30", desc: "보도블럭 융기" },
     ];
+    // Load saved reports from localStorage if present (overrides server initial)
+    try {
+      const saved = JSON.parse(localStorage.getItem("pgis_reports") || "null");
+      if (Array.isArray(saved) && saved.length > 0) {
+        reports = saved;
+      }
+    } catch (e) {
+      console.warn("Failed to load saved reports", e);
+    }
 
     let mapMode = "diagnostic";
     let sideOpen = true;
@@ -741,6 +792,7 @@ APP_HTML = r"""
       avgPost: document.getElementById("avgPost"),
       blindspots: document.getElementById("blindspots"),
       reportModeButton: document.getElementById("reportModeButton"),
+      exportReports: document.getElementById("exportReports"),
       reportHint: document.getElementById("reportHint"),
       reportFormSection: document.getElementById("reportFormSection"),
       reportLocation: document.getElementById("reportLocation"),
@@ -820,8 +872,8 @@ APP_HTML = r"""
       const features = sourceHexGrid.features.map((hex, index) => {
         const center = turf.centroid(hex);
         const nearby = sourceReports.filter((report) => {
-          const distance = turf.distance(center, turf.point([report.lng, report.lat]), { units: "meters" });
-          return distance < 80;
+          const distance = turf.distance(center, turf.point([report.lng, report.lat]), { units: "kilometers" });
+          return distance < 0.08; // 80 meters
         });
         const prior = seededPrior(hex);
         const likelihood = nearby.length > 0
@@ -944,31 +996,30 @@ APP_HTML = r"""
       reports.forEach((report) => {
         const meta = TYPE_META[report.type] || { icon: "⚠️" };
         const isNew = report.id === lastSubmittedReportId;
-        const icon = L.divIcon({
-          className: "",
-          html: `<div class="marker-icon ${isNew ? "new" : ""}">${meta.icon}</div>`,
-          iconSize: [28, 28],
-          iconAnchor: [14, 14],
-        });
-        L.marker([report.lat, report.lng], { icon })
-          .bindPopup(markerPopup(report), { offset: [0, -8], closeButton: false })
-          .addTo(markerLayer);
-      });
-    }
-
-    function updateStats() {
-      const posteriors = hexData.features.map((feature) => feature.properties.posterior);
-      const avg = posteriors.reduce((sum, value) => sum + value, 0) / posteriors.length * 100;
-      const blindspots = hexData.features.filter((feature) => feature.properties.variation > 0.15).length;
-      els.totalReports.textContent = reports.length;
-      els.avgPost.textContent = avg.toFixed(1);
-      els.blindspots.textContent = blindspots;
-    }
-
-    function recompute() {
-      hexData = computeBayesian(reports, getHexGrid());
-      rebuildHexLayer();
-      renderMarkers();
+      const [bg, fg] = confidenceColor(selectedHex.confidence);
+      els.selectedHexSection.style.display = "block";
+      els.selectedHexBody.innerHTML = `
+        ${metricRow("기본 위험도", `${(selectedHex.prior * 100).toFixed(0)}%`, "var(--muted)")}
+        ${metricRow("신고 기반 위험도", `${(selectedHex.likelihood * 100).toFixed(0)}%`, "var(--accent)")}
+        ${metricRow(
+          "최종 위험도",
+          `${(selectedHex.posterior * 100).toFixed(0)}%`,
+          selectedHex.posterior > 0.5 ? "var(--danger)" : "var(--warning)"
+        )}
+        ${metricRow(
+          "위험도 변화",
+          `${selectedHex.variation > 0 ? "↑ +" : "↓ "}${Math.abs(selectedHex.variation * 100).toFixed(0)}%`,
+          selectedHex.variation > 0.15 ? "var(--danger)" : "var(--safe)"
+        )}
+        <div class="analysis-row" style="border-bottom:0;margin-top:4px;">
+          <span class="analysis-label">신고 건수</span>
+          <span class="analysis-value">${selectedHex.reportCount}건</span>
+        </div>
+        <div class="analysis-row" style="border-bottom:0;padding-top:2px;">
+          <span class="analysis-label">신뢰도</span>
+          <span class="pill" style="background:${bg};color:${fg};">${confidenceLabel(selectedHex.confidence)}</span>
+        </div>
+      `;
       updateStats();
       if (selectedHex) {
         const refreshed = hexData.features.find((feature) => feature.properties.hexId === selectedHex.hexId);
@@ -1142,8 +1193,26 @@ APP_HTML = r"""
       lastSubmittedReportId = newReport.id;
       reportMode = false;
       reportForm = null;
+      // persist
+      try { localStorage.setItem("pgis_reports", JSON.stringify(reports)); } catch (e) { console.warn("save failed", e); }
       recompute();
       renderReportControls();
+    }
+
+    function exportReportsCSV() {
+      if (!reports || reports.length === 0) return;
+      const header = ["id","lng","lat","type","intensity","time","desc"];
+      const rows = reports.map(r => header.map(h => JSON.stringify(r[h] ?? "")).join(","));
+      const csv = [header.join(",")].concat(rows).join("\n");
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `pgis_reports_${new Date().toISOString().slice(0,10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
     }
 
     Object.keys(TYPE_META).forEach((type) => {
@@ -1164,6 +1233,7 @@ APP_HTML = r"""
     });
 
     els.reportModeButton.addEventListener("click", startReportMode);
+    els.exportReports.addEventListener("click", exportReportsCSV);
     els.submitReport.addEventListener("click", submitReport);
     els.closeReportForm.addEventListener("click", () => {
       reportForm = null;
@@ -1203,7 +1273,9 @@ APP_HTML = r"""
 """
 
 components.html(
-    APP_HTML.replace("__MAPBOX_TOKEN__", json.dumps(MAPBOX_TOKEN)),
+  APP_HTML.replace("__MAPBOX_TOKEN__", json.dumps(MAPBOX_TOKEN)).replace(
+    "__INITIAL_REPORTS__", json.dumps(initial_reports) if initial_reports is not None else "null"
+  ),
     height=900,
     scrolling=False,
 )
