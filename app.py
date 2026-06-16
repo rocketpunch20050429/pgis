@@ -1333,36 +1333,9 @@ if not served_ok:
 
     embed_dir = os.path.join(os.path.dirname(__file__), "_embed")
     os.makedirs(embed_dir, exist_ok=True)
-    embed_full_path = os.path.join(embed_dir, "embed_full.html")
-    embed_path = os.path.join(embed_dir, "embed.html")
-    # save full app HTML as backup
-    with open(embed_full_path, "w", encoding="utf-8") as f:
-      f.write(html_payload)
-    # write minimal map HTML that centers on Seoul for reliability
-    minimal = f"""
-<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <style>html,body,#map{{height:100%;margin:0;}}</style>
-</head>
-<body>
-  <div id="map"></div>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script>
-    const map = L.map('map').setView([37.5665, 126.9780], 12);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; OpenStreetMap contributors'
-    }).addTo(map);
-    L.marker([37.5665, 126.9780]).addTo(map).bindPopup('Seoul Center').openPopup();
-  </script>
-</body>
-</html>
-"""
+    embed_path = os.path.join(embed_dir, "index.html")
     with open(embed_path, "w", encoding="utf-8") as f:
-      f.write(minimal)
+      f.write(html_payload)
 
     # start server thread if not already started
     if not hasattr(globals(), "_embed_server_thread") or globals().get("_embed_server_thread") is None:
@@ -1384,7 +1357,7 @@ if not served_ok:
         globals()["_embed_server_thread"] = None
 
     # embed via iframe pointing to local server
-    iframe_src = "http://127.0.0.1:8502/embed.html"
+    iframe_src = "http://127.0.0.1:8502/index.html"
     try:
       st.iframe(iframe_src, height=900)
     except Exception:
