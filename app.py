@@ -1321,12 +1321,64 @@ if _HAS_COMPONENTS:
   try:
     components.html(html_payload, height=900, scrolling=False)
     served_ok = True
-  except Exception:
+  except Exception as e:
+    st.warning(f"components.html 사용 불가: {e}")
     served_ok = False
+else:
+  st.warning("streamlit.components.v1 모듈 없음")
+  served_ok = False
 
 if not served_ok:
-  # Direct render using st.markdown with unsafe_allow_html
+  # Use local HTTP server to serve the HTML
   try:
-    st.markdown(html_payload, unsafe_allow_html=True)
+    import threading
+    from http.server import HTTPServer, SimpleHTTPRequestHandler
+    import socket
+    
+    embed_dir = os.path.join(os.path.dirname(__file__), "_pgis_embed")
+    os.makedirs(embed_dir, exist_ok=True)
+    
+    # Write HTML file
+    html_file = os.path.join(embed_dir, "index.html")
+    with open(html_file, "w", encoding="utf-8") as f:
+      f.write(html_payload)
+    
+    # Find free port
+    def find_free_port():
+      with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(('127.0.0.1', 0))
+        s.listen(1)
+        port = s.getsockname()[1]
+      return port
+    
+    # Check if server is already running
+    server_port = st.session_state.get("_pgis_server_port", None)
+    server_thread = st.session_state.get("_pgis_server_thread", None)
+    
+    if server_port is None or server_thread is None or not server_thread.is_alive():
+      server_port = find_free_port()
+      
+      class QuietHandler(SimpleHTTPRequestHandler):
+        def log_message(self, format, *args):
+          pass
+      
+      def run_server():
+        os.chdir(embed_dir)
+        server = HTTPServer(('127.0.0.1', server_port), QuietHandler)
+        server.serve_forever()
+      
+      thread = threading.Thread(target=run_server, daemon=True)
+      thread.start()
+      st.session_state._pgis_server_port = server_port
+      st.session_state._pgis_server_thread = thread
+      import time
+      time.sleep(0.5)  # Brief wait for server to start
+    
+    # Embed via iframe
+    iframe_url = f"http://127.0.0.1:{server_port}/index.html"
+    st.markdown(f"""
+<iframe src="{iframe_url}" style="width:100%;height:900px;border:0;border-radius:8px;"></iframe>
+""", unsafe_allow_html=True)
+    
   except Exception as e:
-    st.error(f"앱 렌더링 오류: {e}")
+    st.error(f"서버 시작 오류: {e}\n\n앱을 다시 열어주세요.")
