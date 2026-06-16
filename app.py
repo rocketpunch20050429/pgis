@@ -11,7 +11,7 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed",
 )
-
+#
 st.markdown(
     """
     <style>
@@ -618,16 +618,16 @@ APP_HTML = r"""
           <div class="section">
             <div class="section-title">지도 모드</div>
             <button class="mode-button active" data-mode="diagnostic">
-              <div class="mode-label">진단 지도</div>
-              <div class="mode-desc">Prior 대비 Posterior 편차</div>
+              <div class="mode-label">위험 변화 지도</div>
+              <div class="mode-desc">신고로 인한 위험도 변화</div>
             </button>
             <button class="mode-button" data-mode="uncertainty">
-              <div class="mode-label">신뢰도 지도</div>
-              <div class="mode-desc">데이터 밀도 기반 신뢰도</div>
+              <div class="mode-label">정보량 지도</div>
+              <div class="mode-desc">신고가 많은 지역 표시</div>
             </button>
             <button class="mode-button" data-mode="posterior">
-              <div class="mode-label">사후확률 지도</div>
-              <div class="mode-desc">최종 위험 확률 분포</div>
+              <div class="mode-label">최종 위험도 지도</div>
+              <div class="mode-desc">최종 위험도 한눈에 보기</div>
             </button>
           </div>
 
@@ -702,9 +702,9 @@ APP_HTML = r"""
     };
 
     const MAP_MODES = {
-      diagnostic: { label: "진단 지도", desc: "Prior 대비 Posterior 편차" },
-      uncertainty: { label: "신뢰도 지도", desc: "데이터 밀도 기반 신뢰도" },
-      posterior: { label: "사후확률 지도", desc: "최종 위험 확률 분포" },
+      diagnostic: { label: "위험 변화 지도", desc: "기본 위험도 대비 변화" },
+      uncertainty: { label: "정보량 지도", desc: "주민 신고 정보의 양" },
+      posterior: { label: "최종 위험도 지도", desc: "종합 위험도" },
     };
 
     let reports = [
@@ -976,9 +976,9 @@ APP_HTML = r"""
     }
 
     function confidenceLabel(value) {
-      if (value === "high") return "높음";
-      if (value === "medium") return "보통";
-      return "낮음";
+      if (value === "high") return "높음 (많은 신고)";
+      if (value === "medium") return "중간 (적당한 신고)";
+      return "낮음 (신고 부족)";
     }
 
     function confidenceColor(value) {
@@ -1005,16 +1005,16 @@ APP_HTML = r"""
       const [bg, fg] = confidenceColor(selectedHex.confidence);
       els.selectedHexSection.style.display = "block";
       els.selectedHexBody.innerHTML = `
-        ${metricRow("사전 확률 (Prior)", `${(selectedHex.prior * 100).toFixed(1)}%`, "var(--muted)")}
-        ${metricRow("우도 (Likelihood)", `${(selectedHex.likelihood * 100).toFixed(1)}%`, "var(--accent)")}
+        ${metricRow("기본 위험도", `${(selectedHex.prior * 100).toFixed(0)}%", "var(--muted)")}
+        ${metricRow("신고 기반 위험도", `${(selectedHex.likelihood * 100).toFixed(0)}%", "var(--accent)")}
         ${metricRow(
-          "사후 확률 (Posterior)",
-          `${(selectedHex.posterior * 100).toFixed(1)}%`,
+          "최종 위험도",
+          `${(selectedHex.posterior * 100).toFixed(0)}%",
           selectedHex.posterior > 0.5 ? "var(--danger)" : "var(--warning)"
         )}
         ${metricRow(
-          "편차 (Variation)",
-          `${selectedHex.variation > 0 ? "+" : ""}${(selectedHex.variation * 100).toFixed(1)}%`,
+          "위험도 변화",
+          `${selectedHex.variation > 0 ? "↑ +" : "↓ "}${Math.abs(selectedHex.variation * 100).toFixed(0)}%",
           selectedHex.variation > 0.15 ? "var(--danger)" : "var(--safe)"
         )}
         <div class="analysis-row" style="border-bottom:0;margin-top:4px;">
@@ -1033,25 +1033,25 @@ APP_HTML = r"""
       if (mapMode === "diagnostic") {
         els.legendBody.innerHTML = `
           <div class="gradient-legend">
-            <span style="color:var(--safe);">안전</span>
+            <span style="color:var(--safe);">안전함</span>
             <div class="gradient-bar" style="background:linear-gradient(to right,#10b981,#fbbf24,#f97316,#ef4444,#7f1d1d);"></div>
-            <span style="color:var(--danger);">사각지대</span>
+            <span style="color:var(--danger);">매우 위험</span>
           </div>
         `;
       } else if (mapMode === "uncertainty") {
         els.legendBody.innerHTML = `
           <div class="confidence-legend">
-            <div class="confidence-item"><span class="swatch" style="background:#3b82f6;"></span>높음</div>
-            <div class="confidence-item"><span class="swatch" style="background:#60a5fa;"></span>보통</div>
-            <div class="confidence-item"><span class="swatch" style="background:#1e3a5f;"></span>낮음</div>
+            <div class="confidence-item"><span class="swatch" style="background:#3b82f6;"></span>정보 많음</div>
+            <div class="confidence-item"><span class="swatch" style="background:#60a5fa;"></span>정보 적당</div>
+            <div class="confidence-item"><span class="swatch" style="background:#1e3a5f;"></span>정보 부족</div>
           </div>
         `;
       } else {
         els.legendBody.innerHTML = `
           <div class="gradient-legend">
-            <span style="color:var(--safe);">0%</span>
+            <span style="color:var(--safe);">안전 (0%)</span>
             <div class="gradient-bar" style="background:linear-gradient(to right,#064e3b,#10b981,#fbbf24,#f97316,#ef4444);"></div>
-            <span style="color:var(--danger);">80%+</span>
+            <span style="color:var(--danger);">위험 (80%+)</span>
           </div>
         `;
       }
