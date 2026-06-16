@@ -709,20 +709,7 @@ APP_HTML = r"""
       posterior: { label: "최종 위험도 지도", desc: "종합 위험도" },
     };
 
-    let reports = [
-      { id: 1, lng: 126.9751, lat: 37.5720, type: "조명 부족", intensity: 4, time: "22:30", desc: "골목 안쪽 가로등 고장" },
-      { id: 2, lng: 126.9800, lat: 37.5695, type: "시야 차단", intensity: 5, time: "19:00", desc: "담벼락으로 시야 완전 차단" },
-      { id: 3, lng: 126.9770, lat: 37.5680, type: "도로 파손", intensity: 3, time: "08:15", desc: "인도 블록 파손" },
-      { id: 4, lng: 126.9815, lat: 37.5715, type: "불법 주정차", intensity: 4, time: "17:45", desc: "어린이보호구역 불법주정차" },
-      { id: 5, lng: 126.9760, lat: 37.5740, type: "조명 부족", intensity: 5, time: "23:00", desc: "공원 입구 조명 전무" },
-      { id: 6, lng: 126.9795, lat: 37.5660, type: "시야 차단", intensity: 3, time: "07:30", desc: "적치물로 보행 시야 방해" },
-      { id: 7, lng: 126.9830, lat: 37.5700, type: "도로 파손", intensity: 2, time: "12:00", desc: "맨홀 뚜껑 파손" },
-      { id: 8, lng: 126.9740, lat: 37.5705, type: "조명 부족", intensity: 4, time: "21:00", desc: "주택가 진입로 어두움" },
-      { id: 9, lng: 126.9810, lat: 37.5735, type: "불법 주정차", intensity: 5, time: "08:00", desc: "통학로 차량 점거" },
-      { id: 10, lng: 126.9775, lat: 37.5665, type: "시야 차단", intensity: 4, time: "18:30", desc: "공사 가림막 방치" },
-      { id: 11, lng: 126.9755, lat: 37.5690, type: "조명 부족", intensity: 3, time: "20:00", desc: "골목 조명 흐림" },
-      { id: 12, lng: 126.9820, lat: 37.5680, type: "도로 파손", intensity: 4, time: "09:30", desc: "보도블럭 융기" },
-    ];
+    let reports = __UPLOADED_DATA__;
 
     let mapMode = "diagnostic";
     let sideOpen = true;
@@ -1007,16 +994,16 @@ APP_HTML = r"""
       const [bg, fg] = confidenceColor(selectedHex.confidence);
       els.selectedHexSection.style.display = "block";
       els.selectedHexBody.innerHTML = `
-        ${metricRow("기본 위험도", `${(selectedHex.prior * 100).toFixed(0)}%", "var(--muted)")}
-        ${metricRow("신고 기반 위험도", `${(selectedHex.likelihood * 100).toFixed(0)}%", "var(--accent)")}
+        ${metricRow("기본 위험도", `${(selectedHex.prior * 100).toFixed(0)}%`, "var(--muted)")}
+        ${metricRow("신고 기반 위험도", `${(selectedHex.likelihood * 100).toFixed(0)}%`, "var(--accent)")}
         ${metricRow(
           "최종 위험도",
-          `${(selectedHex.posterior * 100).toFixed(0)}%",
+          `${(selectedHex.posterior * 100).toFixed(0)}%`,
           selectedHex.posterior > 0.5 ? "var(--danger)" : "var(--warning)"
         )}
         ${metricRow(
           "위험도 변화",
-          `${selectedHex.variation > 0 ? "↑ +" : "↓ "}${Math.abs(selectedHex.variation * 100).toFixed(0)}%",
+          `${selectedHex.variation > 0 ? "↑ +" : "↓ "}${Math.abs(selectedHex.variation * 100).toFixed(0)}%`,
           selectedHex.variation > 0.15 ? "var(--danger)" : "var(--safe)"
         )}
         <div class="analysis-row" style="border-bottom:0;margin-top:4px;">
@@ -1130,7 +1117,7 @@ APP_HTML = r"""
       const now = new Date();
       const time = now.toTimeString().slice(0, 5);
       const newReport = {
-        id: reports.length + 1,
+        id: Math.max(...reports.map(r => r.id)) + 1,
         lng: parseFloat(reportForm.lng),
         lat: parseFloat(reportForm.lat),
         type: reportForm.type,
@@ -1203,7 +1190,23 @@ APP_HTML = r"""
 """
 
 components.html(
-    APP_HTML.replace("__MAPBOX_TOKEN__", json.dumps(MAPBOX_TOKEN)),
+    APP_HTML.replace("__MAPBOX_TOKEN__", json.dumps(MAPBOX_TOKEN)).replace(
+        "__UPLOADED_DATA__",
+        json.dumps([
+            { "id": 1, "lng": 126.9751, "lat": 37.5720, "type": "조명 부족", "intensity": 4, "time": "22:30", "desc": "골목 안쪽 가로등 고장" },
+            { "id": 2, "lng": 126.9800, "lat": 37.5695, "type": "시야 차단", "intensity": 5, "time": "19:00", "desc": "담벼락으로 시야 완전 차단" },
+            { "id": 3, "lng": 126.9770, "lat": 37.5680, "type": "도로 파손", "intensity": 3, "time": "08:15", "desc": "인도 블록 파손" },
+            { "id": 4, "lng": 126.9815, "lat": 37.5715, "type": "불법 주정차", "intensity": 4, "time": "17:45", "desc": "어린이보호구역 불법주정차" },
+            { "id": 5, "lng": 126.9760, "lat": 37.5740, "type": "조명 부족", "intensity": 5, "time": "23:00", "desc": "공원 입구 조명 전무" },
+            { "id": 6, "lng": 126.9795, "lat": 37.5660, "type": "시야 차단", "intensity": 3, "time": "07:30", "desc": "적치물로 보행 시야 방해" },
+            { "id": 7, "lng": 126.9830, "lat": 37.5700, "type": "도로 파손", "intensity": 2, "time": "12:00", "desc": "맨홀 뚜껑 파손" },
+            { "id": 8, "lng": 126.9740, "lat": 37.5705, "type": "조명 부족", "intensity": 4, "time": "21:00", "desc": "주택가 진입로 어두움" },
+            { "id": 9, "lng": 126.9810, "lat": 37.5735, "type": "불법 주정차", "intensity": 5, "time": "08:00", "desc": "통학로 차량 점거" },
+            { "id": 10, "lng": 126.9775, "lat": 37.5665, "type": "시야 차단", "intensity": 4, "time": "18:30", "desc": "공사 가림막 방치" },
+            { "id": 11, "lng": 126.9755, "lat": 37.5690, "type": "조명 부족", "intensity": 3, "time": "20:00", "desc": "골목 조명 흐림" },
+            { "id": 12, "lng": 126.9820, "lat": 37.5680, "type": "도로 파손", "intensity": 4, "time": "09:30", "desc": "보도블럭 융기" },
+        ])
+    ),
     height=900,
     scrolling=False,
 )
