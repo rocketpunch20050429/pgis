@@ -2,7 +2,7 @@ import json
 import os
 
 import streamlit as st
-import streamlit.components.v1 as components
+import urllib.parse
 
 
 st.set_page_config(
@@ -1268,14 +1268,45 @@ APP_HTML = r"""
     renderSelectedHex();
     setTimeout(() => map.invalidateSize(), 200);
   </script>
+  <script>
+    function showOverlay(msg) {
+      let el = document.getElementById('pgisErrorOverlay');
+      if (!el) {
+        el = document.createElement('div');
+        el.id = 'pgisErrorOverlay';
+        Object.assign(el.style, {
+          position: 'fixed',
+          left: '8px',
+          top: '8px',
+          right: '8px',
+          maxHeight: '40vh',
+          overflow: 'auto',
+          background: 'rgba(0,0,0,0.8)',
+          color: '#fff',
+          zIndex: 99999,
+          padding: '12px',
+          fontSize: '13px',
+          borderRadius: '8px',
+        });
+        document.body.appendChild(el);
+      }
+      el.textContent = String(msg);
+    }
+    window.addEventListener('error', function (e) {
+      showOverlay('Error: ' + (e && e.message) + ' (at ' + (e && e.filename) + ':' + (e && e.lineno) + ')');
+    });
+    window.addEventListener('unhandledrejection', function (e) {
+      showOverlay('Unhandled promise rejection: ' + (e && e.reason && (e.reason.message || e.reason)));
+    });
+  </script>
 </body>
 </html>
 """
 
-components.html(
-  APP_HTML.replace("__MAPBOX_TOKEN__", json.dumps(MAPBOX_TOKEN)).replace(
-    "__INITIAL_REPORTS__", json.dumps(initial_reports) if initial_reports is not None else "null"
-  ),
-    height=900,
-    scrolling=False,
+html_payload = APP_HTML.replace("__MAPBOX_TOKEN__", json.dumps(MAPBOX_TOKEN)).replace(
+  "__INITIAL_REPORTS__", json.dumps(initial_reports) if initial_reports is not None else "null"
 )
+# Use srcdoc in an iframe to embed the full HTML reliably inside Streamlit
+safe_srcdoc = html_payload.replace('"', '&quot;')
+iframe_html = f'<iframe srcdoc="{safe_srcdoc}" style="width:100%;height:900px;border:0;" sandbox="allow-scripts allow-same-origin"></iframe>'
+st.markdown(iframe_html, unsafe_allow_html=True)
