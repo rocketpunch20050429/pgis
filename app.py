@@ -593,49 +593,55 @@ st.markdown("### 📊 상세 분석")
 
 if st.session_state.reports:
     reports_df = pd.DataFrame(normalize_reports(st.session_state.reports))
-    col_chart1, col_chart2 = st.columns(2)
-    
-    with col_chart1:
-        # 동별 신고 현황
-        dong_reports = reports_df.groupby("dong").size().sort_values(ascending=False)
-        fig1 = px.bar(
-            x=dong_reports.index,
-            y=dong_reports.values,
-            labels={"x": "동", "y": "신고 건수"},
-            color=dong_reports.values,
-            color_continuous_scale="RdYlGn_r",
-        )
-        fig1.update_layout(height=400, showlegend=False)
-        st.plotly_chart(fig1, use_container_width=True)
-    
-    with col_chart2:
-        # 위험도 분포
-        intensity_dist = reports_df["intensity"].value_counts().sort_index()
-        fig2 = px.bar(
-            x=intensity_dist.index,
-            y=intensity_dist.values,
-            labels={"x": "위험도", "y": "신고 건수"},
-            color=intensity_dist.index,
-            color_continuous_scale="Reds",
-        )
-        fig2.update_layout(height=400, showlegend=False)
-        st.plotly_chart(fig2, use_container_width=True)
+    if reports_df.empty or "dong" not in reports_df.columns:
+        st.info("분석 가능한 신고 데이터가 없습니다.")
+    else:
+        col_chart1, col_chart2 = st.columns(2)
+        
+        with col_chart1:
+            # 동별 신고 현황
+            dong_reports = reports_df.groupby("dong").size().sort_values(ascending=False)
+            fig1 = px.bar(
+                x=dong_reports.index,
+                y=dong_reports.values,
+                labels={"x": "동", "y": "신고 건수"},
+                color=dong_reports.values,
+                color_continuous_scale="RdYlGn_r",
+            )
+            fig1.update_layout(height=400, showlegend=False)
+            st.plotly_chart(fig1, use_container_width=True)
+        
+        with col_chart2:
+            # 위험도 분포
+            intensity_dist = reports_df["intensity"].value_counts().sort_index()
+            fig2 = px.bar(
+                x=intensity_dist.index,
+                y=intensity_dist.values,
+                labels={"x": "위험도", "y": "신고 건수"},
+                color=intensity_dist.index,
+                color_continuous_scale="Reds",
+            )
+            fig2.update_layout(height=400, showlegend=False)
+            st.plotly_chart(fig2, use_container_width=True)
 
 # 신고 테이블
 st.markdown("### 📋 상세 신고 목록")
 if st.session_state.reports:
     df_reports = pd.DataFrame(normalize_reports(st.session_state.reports))
-    if selected_dong != "전체":
-        df_reports = df_reports[df_reports["dong"] == selected_dong]
-    
-    df_display = df_reports[["id", "dong", "type", "intensity", "time", "desc"]].copy()
-    df_display.columns = ["ID", "동", "유형", "위험도", "시간", "설명"]
-    
-    st.dataframe(
-        df_display.sort_values("ID", ascending=False),
-        use_container_width=True,
-        height=400,
-    )
+    if df_reports.empty or "dong" not in df_reports.columns:
+        st.info("표시할 수 있는 신고 데이터가 없습니다.")
+    else:
+        if selected_dong != "전체":
+            df_reports = df_reports[df_reports["dong"] == selected_dong]
+        
+        df_display = df_reports[["id", "dong", "type", "intensity", "time", "desc"]].copy()
+        df_display.columns = ["ID", "동", "유형", "위험도", "시간", "설명"]
+        
+        st.dataframe(
+            df_display.sort_values("ID", ascending=False),
+            use_container_width=True,
+            height=400,
+        )
 else:
     st.info("📌 아직 신고가 없습니다. 지도를 클릭하여 신고를 등록해주세요.")
 
