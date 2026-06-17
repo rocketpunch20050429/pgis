@@ -26,6 +26,12 @@ JUNGGU_BOUNDS = {
     "west": 126.9840,
 }
 GRID_SIZE_M = 300
+REPORT_INFLUENCE_RADIUS_M = 850
+REPORT_DECAY_DISTANCE_M = 320
+REPORT_DENSITY_SATURATION = 2.2
+BACKGROUND_LIKELIHOOD = 0.07
+FALSE_ALARM_RATE = 0.10
+MAX_PRIOR_BOOST = 0.22
 REPORTS_FILE = os.path.join(os.path.dirname(__file__), "reports.json")
 
 # ========== 중구 행정동 데이터 ==========
@@ -441,6 +447,14 @@ def create_grid():
     
     return grid
 
+def get_report_distance_weight(distance_m):
+    if distance_m > REPORT_INFLUENCE_RADIUS_M:
+        return 0
+    return math.exp(-0.5 * (distance_m / REPORT_DECAY_DISTANCE_M) ** 2)
+
+def get_density_factor(weighted_count):
+    return 1 - math.exp(-weighted_count / REPORT_DENSITY_SATURATION)
+
 def bayesian_update(grid, reports):
     """베이지안 정리 계산"""
     reports = normalize_reports(reports)
@@ -448,22 +462,42 @@ def bayesian_update(grid, reports):
     
     for cell in grid:
         prior = cell["prior"]
-        nearby = [r for r in reports 
-                  if haversine_distance(cell["lat"], cell["lon"], r["lat"], r["lng"]) < 500]
+        nearby_count = 0
+        weighted_count = 0
+        weighted_risk = 0
         
-        if nearby:
-            likelihood = min(1.0, sum([r["intensity"] for r in nearby]) / (5 * len(nearby)))
+        for report in reports:
+            distance = haversine_distance(cell["lat"], cell["lon"], report["lat"], report["lng"])
+            distance_weight = get_report_distance_weight(distance)
+            if distance_weight <= 0:
+                continue
+
+            nearby_count += 1
+            weighted_count += distance_weight
+            weighted_risk += distance_weight * (report["intensity"] / 5)
+
+        if weighted_count > 0:
+            local_risk = weighted_risk / weighted_count
+            density_factor = get_density_factor(weighted_count)
+            likelihood = BACKGROUND_LIKELIHOOD + (local_risk - BACKGROUND_LIKELIHOOD) * density_factor
+            adaptive_prior = min(0.5, prior + density_factor * MAX_PRIOR_BOOST)
         else:
-            likelihood = 0.05
+            local_risk = 0
+            density_factor = 0
+            likelihood = BACKGROUND_LIKELIHOOD
+            adaptive_prior = prior
         
-        evidence = prior * likelihood + (1 - prior) * 0.1
-        posterior = (prior * likelihood) / evidence if evidence > 0 else prior
+        evidence = adaptive_prior * likelihood + (1 - adaptive_prior) * FALSE_ALARM_RATE
+        posterior = (adaptive_prior * likelihood) / evidence if evidence > 0 else adaptive_prior
         
         updated.append({
             **cell,
             "likelihood": likelihood,
             "posterior": posterior,
-            "report_count": len(nearby),
+            "report_count": nearby_count,
+            "weighted_count": weighted_count,
+            "local_risk": local_risk,
+            "density_factor": density_factor,
         })
     
     return updated
@@ -482,11 +516,11 @@ def get_color(value):
 def get_heat_weight(value):
     return max(0.0, min(1.0, (value - 0.08) / 0.42))
 
-def get_zone_radius(value, report_count):
-    return 8 + get_heat_weight(value) * 18 + min(report_count, 5)
+def get_zone_radius(value, report_count, weighted_count=0):
+    return 7 + get_heat_weight(value) * 20 + min(weighted_count * 4, 8) + min(report_count, 3) * 0.8
 
-def get_zone_opacity(value):
-    return 0.14 + get_heat_weight(value) * 0.28
+def get_zone_opacity(value, density_factor=0):
+    return min(0.52, 0.12 + get_heat_weight(value) * 0.24 + density_factor * 0.14)
 
 def get_map_click_coords(map_data):
     if not map_data:
@@ -804,7 +838,11 @@ with col_right:
         if selected_dong == "전체" or cell["dong"] == selected_dong
     ]
     heat_points = [
-        [cell["lat"], cell["lon"], get_heat_weight(cell["posterior"])]
+        [
+            cell["lat"],
+            cell["lon"],
+            get_heat_weight(cell["posterior"]) * (0.65 + cell["density_factor"] * 0.35),
+        ]
         for cell in visible_cells
         if get_heat_weight(cell["posterior"]) > 0
     ]
@@ -838,13 +876,13 @@ with col_right:
         color = get_color(cell["posterior"])
         folium.CircleMarker(
             location=[cell["lat"], cell["lon"]],
-            radius=get_zone_radius(cell["posterior"], cell["report_count"]),
+            radius=get_zone_radius(cell["posterior"], cell["report_count"], cell["weighted_count"]),
             color=color,
             weight=0.8 if heat_weight > 0.25 else 0,
             opacity=0.55,
             fill=True,
             fillColor=color,
-            fillOpacity=get_zone_opacity(cell["posterior"]),
+            fillOpacity=get_zone_opacity(cell["posterior"], cell["density_factor"]),
             interactive=False,
         ).add_to(m)
     
@@ -1044,6 +1082,6 @@ col_f1, col_f2, col_f3 = st.columns(3)
 with col_f1:
     st.caption("💡 **베이지안 정리**: P(위험|신고) = P(신고|위험)×P(위험) / P(신고)")
 with col_f2:
-    st.caption(f"📍 **범위**: 서울 중구 | **격자**: {GRID_SIZE_M}m | **동**: {len(JUNGGU_DONGS)}개")
+    st.caption(f"📍 **범위**: 서울 중구 | **격자**: {GRID_SIZE_M}m | **영향 반경**: {REPORT_INFLUENCE_RADIUS_M}m | **동**: {len(JUNGGU_DONGS)}개")
 with col_f3:
     st.caption("💾 자동 저장: reports.json | 최종 업데이트: 2026-06-16")
