@@ -516,8 +516,12 @@ def get_color(value):
 def get_heat_weight(value):
     return max(0.0, min(1.0, (value - 0.08) / 0.42))
 
-def get_zone_radius(value, report_count, weighted_count=0):
-    return 7 + get_heat_weight(value) * 20 + min(weighted_count * 4, 8) + min(report_count, 3) * 0.8
+def get_zone_radius_m(value, report_count, weighted_count=0):
+    coverage_radius = GRID_SIZE_M * 0.72
+    risk_expansion = GRID_SIZE_M * 0.18 * get_heat_weight(value)
+    density_expansion = min(weighted_count * GRID_SIZE_M * 0.08, GRID_SIZE_M * 0.16)
+    report_expansion = min(report_count, 3) * GRID_SIZE_M * 0.025
+    return coverage_radius + risk_expansion + density_expansion + report_expansion
 
 def get_zone_opacity(value, density_factor=0):
     return min(0.52, 0.12 + get_heat_weight(value) * 0.24 + density_factor * 0.14)
@@ -874,9 +878,9 @@ with col_right:
             continue
         
         color = get_color(cell["posterior"])
-        folium.CircleMarker(
+        folium.Circle(
             location=[cell["lat"], cell["lon"]],
-            radius=get_zone_radius(cell["posterior"], cell["report_count"], cell["weighted_count"]),
+            radius=get_zone_radius_m(cell["posterior"], cell["report_count"], cell["weighted_count"]),
             color=color,
             weight=0.8 if heat_weight > 0.25 else 0,
             opacity=0.55,
