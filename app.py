@@ -196,6 +196,59 @@ def get_dong_by_coords(lat, lon):
             return dong_name
     return "알 수 없음"
 
+def coerce_float(value, default):
+    try:
+        result = float(value)
+        return result if math.isfinite(result) else default
+    except (TypeError, ValueError):
+        return default
+
+def coerce_int(value, default):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+def normalize_report(report):
+    if not isinstance(report, dict):
+        return None
+
+    normalized = dict(report)
+    lat = coerce_float(normalized.get("lat"), JUNGGU_CENTER[0])
+    lng = coerce_float(normalized.get("lng", normalized.get("lon")), JUNGGU_CENTER[1])
+    intensity = max(1, min(5, coerce_int(normalized.get("intensity"), 3)))
+
+    normalized["lat"] = lat
+    normalized["lng"] = lng
+    normalized["intensity"] = intensity
+    normalized.setdefault("type", "report")
+    normalized.setdefault("time", datetime.now().strftime("%m-%d %H:%M"))
+    normalized.setdefault("desc", "")
+
+    if not normalized.get("dong"):
+        normalized["dong"] = get_dong_by_coords(lat, lng)
+
+    return normalized
+
+def normalize_reports(reports):
+    normalized_reports = []
+    next_id = 1
+
+    for report in reports or []:
+        normalized = normalize_report(report)
+        if normalized is None:
+            continue
+
+        report_id = coerce_int(normalized.get("id"), 0)
+        if report_id <= 0:
+            report_id = next_id
+        normalized["id"] = report_id
+        next_id = max(next_id, report_id + 1)
+
+        normalized_reports.append(normalized)
+
+    return normalized_reports
+
 def create_grid():
     """주소 기반 격자 생성"""
     grid = []
@@ -225,6 +278,7 @@ def create_grid():
 
 def bayesian_update(grid, reports):
     """베이지안 정리 계산"""
+    reports = normalize_reports(reports)
     updated = []
     
     for cell in grid:
@@ -281,8 +335,15 @@ def save_reports(reports):
 # ========== 세션 상태 ==========
 if "reports" not in st.session_state:
     st.session_state.reports = load_reports()
-if "next_id" not in st.session_state:
-    st.session_state.next_id = max([r.get("id", 0) for r in st.session_state.reports], default=0) + 1
+normalized_reports = normalize_reports(st.session_state.reports)
+if normalized_reports != st.session_state.reports:
+    st.session_state.reports = normalized_reports
+    save_reports(st.session_state.reports)
+else:
+    st.session_state.reports = normalized_reports
+next_report_id = max([r.get("id", 0) for r in st.session_state.reports], default=0) + 1
+if "next_id" not in st.session_state or st.session_state.next_id < next_report_id:
+    st.session_state.next_id = next_report_id
 if "grid" not in st.session_state:
     st.session_state.grid = create_grid()
 if "selected_dong" not in st.session_state:
@@ -531,11 +592,12 @@ st.divider()
 st.markdown("### 📊 상세 분석")
 
 if st.session_state.reports:
+    reports_df = pd.DataFrame(normalize_reports(st.session_state.reports))
     col_chart1, col_chart2 = st.columns(2)
     
     with col_chart1:
         # 동별 신고 현황
-        dong_reports = pd.DataFrame(st.session_state.reports).groupby("dong").size().sort_values(ascending=False)
+        dong_reports = reports_df.groupby("dong").size().sort_values(ascending=False)
         fig1 = px.bar(
             x=dong_reports.index,
             y=dong_reports.values,
@@ -548,7 +610,7 @@ if st.session_state.reports:
     
     with col_chart2:
         # 위험도 분포
-        intensity_dist = pd.DataFrame(st.session_state.reports)["intensity"].value_counts().sort_index()
+        intensity_dist = reports_df["intensity"].value_counts().sort_index()
         fig2 = px.bar(
             x=intensity_dist.index,
             y=intensity_dist.values,
@@ -562,7 +624,7 @@ if st.session_state.reports:
 # 신고 테이블
 st.markdown("### 📋 상세 신고 목록")
 if st.session_state.reports:
-    df_reports = pd.DataFrame(st.session_state.reports)
+    df_reports = pd.DataFrame(normalize_reports(st.session_state.reports))
     if selected_dong != "전체":
         df_reports = df_reports[df_reports["dong"] == selected_dong]
     
