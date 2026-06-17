@@ -324,6 +324,17 @@ def get_zone_radius(value, report_count):
 def get_zone_opacity(value):
     return 0.14 + get_heat_weight(value) * 0.28
 
+def get_map_click_coords(map_data):
+    if not map_data:
+        return None
+
+    for key in ("last_clicked", "last_object_clicked"):
+        clicked = map_data.get(key)
+        if isinstance(clicked, dict) and clicked.get("lat") is not None and clicked.get("lng") is not None:
+            return float(clicked["lat"]), float(clicked["lng"])
+
+    return None
+
 def load_reports():
     if os.path.exists(REPORTS_FILE):
         try:
@@ -572,6 +583,13 @@ with col_right:
                 1.00: "#d85745",
             },
         ).add_to(m)
+        m.get_root().header.add_child(folium.Element("""
+        <style>
+            .leaflet-heatmap-layer {
+                pointer-events: none !important;
+            }
+        </style>
+        """))
     
     for cell in visible_cells:
         heat_weight = get_heat_weight(cell["posterior"])
@@ -579,14 +597,6 @@ with col_right:
             continue
         
         color = get_color(cell["posterior"])
-        popup = f"""
-        <div style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; min-width: 150px;">
-            <div style="font-weight: 700; color: #111827; margin-bottom: 4px;">{cell['dong']}</div>
-            <div style="color: #475569; font-size: 12px;">위험도 <b>{cell['posterior']:.2%}</b></div>
-            <div style="color: #475569; font-size: 12px;">신고 {cell['report_count']}건</div>
-        </div>
-        """
-        
         folium.CircleMarker(
             location=[cell["lat"], cell["lon"]],
             radius=get_zone_radius(cell["posterior"], cell["report_count"]),
@@ -596,8 +606,7 @@ with col_right:
             fill=True,
             fillColor=color,
             fillOpacity=get_zone_opacity(cell["posterior"]),
-            popup=folium.Popup(popup, max_width=220),
-            tooltip=f"{cell['dong']} · 위험도 {cell['posterior']:.1%}",
+            interactive=False,
         ).add_to(m)
     
     # 신고 마커
@@ -633,6 +642,7 @@ with col_right:
             weight=1.2,
             opacity=0.55,
             dash_array="4, 6",
+            interactive=False,
             label=dong_name,
         ).add_to(m)
     
@@ -655,6 +665,7 @@ with col_right:
             fill=True,
             fillColor="#60a5fa",
             fillOpacity=0.22,
+            bubbling_mouse_events=True,
             popup=folium.Popup(selected_popup, max_width=240),
             tooltip="선택한 신고 위치",
         ).add_to(m)
@@ -706,13 +717,17 @@ with col_right:
     m.get_root().html.add_child(folium.Element(legend_html))
     
     # 지도 렌더링 및 클릭 처리
-    map_data = st_folium(m, width=700, height=700)
+    map_data = st_folium(
+        m,
+        width=700,
+        height=700,
+        returned_objects=["last_clicked", "last_object_clicked"],
+    )
     
     # 클릭 이벤트 처리
-    if map_data and map_data.get("last_clicked"):
-        clicked = map_data["last_clicked"]
-        clicked_lat = float(clicked["lat"])
-        clicked_lng = float(clicked["lng"])
+    clicked_coords = get_map_click_coords(map_data)
+    if clicked_coords:
+        clicked_lat, clicked_lng = clicked_coords
         is_new_location = (
             st.session_state.clicked_lat is None
             or st.session_state.clicked_lng is None
