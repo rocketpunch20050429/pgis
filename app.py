@@ -8,6 +8,7 @@ from datetime import datetime
 import math
 import streamlit as st
 import folium
+from folium.plugins import HeatMap
 from streamlit_folium import st_folium
 import pandas as pd
 import numpy as np
@@ -305,14 +306,23 @@ def bayesian_update(grid, reports):
 
 def get_color(value):
     """위험도 색상"""
-    if value < 0.2:
-        return "#10b981"
-    elif value < 0.4:
-        return "#fbbf24"
-    elif value < 0.6:
-        return "#f97316"
+    if value < 0.16:
+        return "#6cc3b0"
+    elif value < 0.30:
+        return "#d6bd3f"
+    elif value < 0.46:
+        return "#e9873f"
     else:
-        return "#ef4444"
+        return "#d85745"
+
+def get_heat_weight(value):
+    return max(0.0, min(1.0, (value - 0.08) / 0.42))
+
+def get_zone_radius(value, report_count):
+    return 8 + get_heat_weight(value) * 18 + min(report_count, 5)
+
+def get_zone_opacity(value):
+    return 0.14 + get_heat_weight(value) * 0.28
 
 def load_reports():
     if os.path.exists(REPORTS_FILE):
@@ -517,29 +527,68 @@ with col_right:
     st.markdown("💡 **지도를 클릭하여 신고 위치를 선택하세요!**", help="클릭한 좌표가 왼쪽 폼에 자동으로 입력됩니다")
     
     # 베이지안 계산
-    bayesian_grid = bayesian_update(st.session_state.grid, st.session_state.reports)
+    reports_for_map = normalize_reports(st.session_state.reports)
+    bayesian_grid = bayesian_update(st.session_state.grid, reports_for_map)
     
     # 지도 생성
-    m = folium.Map(location=JUNGGU_CENTER, zoom_start=13, tiles="OpenStreetMap")
+    m = folium.Map(
+        location=JUNGGU_CENTER,
+        zoom_start=13,
+        tiles="CartoDB positron",
+        control_scale=True,
+        prefer_canvas=True,
+    )
     
-    # 격자 표시
-    for cell in bayesian_grid:
-        if selected_dong != "전체" and cell["dong"] != selected_dong:
+    # 위험도 레이어
+    visible_cells = [
+        cell for cell in bayesian_grid
+        if selected_dong == "전체" or cell["dong"] == selected_dong
+    ]
+    heat_points = [
+        [cell["lat"], cell["lon"], get_heat_weight(cell["posterior"])]
+        for cell in visible_cells
+        if get_heat_weight(cell["posterior"]) > 0
+    ]
+    
+    if heat_points:
+        HeatMap(
+            heat_points,
+            radius=34,
+            blur=28,
+            min_opacity=0.12,
+            gradient={
+                0.15: "#6cc3b0",
+                0.45: "#d6bd3f",
+                0.70: "#e9873f",
+                1.00: "#d85745",
+            },
+        ).add_to(m)
+    
+    for cell in visible_cells:
+        heat_weight = get_heat_weight(cell["posterior"])
+        if heat_weight <= 0 and cell["report_count"] == 0:
             continue
-        color = get_color(cell["posterior"])
-        popup = f"<b>{cell['dong']}</b><br/>위험도: {cell['posterior']:.2%}<br/>신고: {cell['report_count']}건"
         
-        folium.Rectangle(
-            bounds=[
-                [cell["lat"] - GRID_SIZE_M/222000, cell["lon"] - GRID_SIZE_M/222000],
-                [cell["lat"] + GRID_SIZE_M/222000, cell["lon"] + GRID_SIZE_M/222000],
-            ],
+        color = get_color(cell["posterior"])
+        popup = f"""
+        <div style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; min-width: 150px;">
+            <div style="font-weight: 700; color: #111827; margin-bottom: 4px;">{cell['dong']}</div>
+            <div style="color: #475569; font-size: 12px;">위험도 <b>{cell['posterior']:.2%}</b></div>
+            <div style="color: #475569; font-size: 12px;">신고 {cell['report_count']}건</div>
+        </div>
+        """
+        
+        folium.CircleMarker(
+            location=[cell["lat"], cell["lon"]],
+            radius=get_zone_radius(cell["posterior"], cell["report_count"]),
             color=color,
+            weight=0.8 if heat_weight > 0.25 else 0,
+            opacity=0.55,
             fill=True,
             fillColor=color,
-            fillOpacity=0.6,
-            weight=1,
-            popup=popup,
+            fillOpacity=get_zone_opacity(cell["posterior"]),
+            popup=folium.Popup(popup, max_width=220),
+            tooltip=f"{cell['dong']} · 위험도 {cell['posterior']:.1%}",
         ).add_to(m)
     
     # 신고 마커
@@ -551,7 +600,7 @@ with col_right:
         "기타": "gray",
     }
     
-    for report in st.session_state.reports:
+    for report in reports_for_map:
         if selected_dong != "전체" and report.get("dong") != selected_dong:
             continue
         
@@ -570,11 +619,42 @@ with col_right:
         b = dong_data["bounds"]
         folium.Rectangle(
             bounds=[[b["south"], b["west"]], [b["north"], b["east"]]],
-            color="black",
+            color="#475569",
             fill=False,
-            weight=2,
+            weight=1.2,
+            opacity=0.55,
+            dash_array="4, 6",
             label=dong_name,
         ).add_to(m)
+    
+    legend_html = """
+    <div style="
+        position: fixed;
+        left: 24px;
+        bottom: 28px;
+        z-index: 9999;
+        width: 152px;
+        padding: 10px 12px;
+        background: rgba(255, 255, 255, 0.88);
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        border-radius: 8px;
+        box-shadow: 0 12px 28px rgba(15, 23, 42, 0.14);
+        color: #0f172a;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    ">
+        <div style="font-size: 12px; font-weight: 700; margin-bottom: 7px;">위험도</div>
+        <div style="
+            height: 8px;
+            border-radius: 8px;
+            background: linear-gradient(90deg, #6cc3b0 0%, #d6bd3f 42%, #e9873f 70%, #d85745 100%);
+        "></div>
+        <div style="display: flex; justify-content: space-between; margin-top: 5px; font-size: 10px; color: #64748b;">
+            <span>낮음</span>
+            <span>높음</span>
+        </div>
+    </div>
+    """
+    m.get_root().html.add_child(folium.Element(legend_html))
     
     # 지도 렌더링 및 클릭 처리
     map_data = st_folium(m, width=700, height=700)
