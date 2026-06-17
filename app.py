@@ -5,6 +5,7 @@ Bayesian PGIS 서울 중구 안전지도 - 지도 클릭 직접 입력
 import json
 import os
 from datetime import datetime
+import html
 import math
 import streamlit as st
 import folium
@@ -164,6 +165,168 @@ CUSTOM_CSS = """
         padding: 1rem;
         border-radius: 6px;
         margin-top: 1rem;
+    }
+
+    .report-board {
+        background: rgba(255, 255, 255, 0.94);
+        border: 1px solid rgba(148, 163, 184, 0.28);
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 18px 42px rgba(15, 23, 42, 0.12);
+    }
+
+    .report-board__header {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        align-items: flex-end;
+        padding: 1rem 1.15rem;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.24);
+        background: linear-gradient(180deg, rgba(248, 250, 252, 0.95), rgba(255, 255, 255, 0.95));
+    }
+
+    .report-board__title {
+        color: #0f172a;
+        font-size: 1rem;
+        font-weight: 750;
+        line-height: 1.2;
+        margin: 0;
+    }
+
+    .report-board__sub {
+        color: #64748b;
+        font-size: 0.78rem;
+        margin-top: 0.25rem;
+    }
+
+    .report-board__meta {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
+
+    .report-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        border: 1px solid rgba(148, 163, 184, 0.34);
+        border-radius: 999px;
+        color: #334155;
+        background: #ffffff;
+        font-size: 0.74rem;
+        font-weight: 650;
+        padding: 0.34rem 0.58rem;
+        white-space: nowrap;
+    }
+
+    .report-table-wrap {
+        max-height: 460px;
+        overflow: auto;
+    }
+
+    .report-table {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+        table-layout: fixed;
+        color: #0f172a;
+    }
+
+    .report-table thead th {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        background: #f8fafc;
+        color: #475569;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.32);
+        font-size: 0.72rem;
+        font-weight: 750;
+        letter-spacing: 0;
+        text-align: left;
+        padding: 0.72rem 0.85rem;
+    }
+
+    .report-table tbody td {
+        border-bottom: 1px solid rgba(226, 232, 240, 0.86);
+        padding: 0.78rem 0.85rem;
+        vertical-align: middle;
+        font-size: 0.84rem;
+        background: rgba(255, 255, 255, 0.92);
+    }
+
+    .report-table tbody tr:nth-child(even) td {
+        background: rgba(248, 250, 252, 0.78);
+    }
+
+    .report-table tbody tr:hover td {
+        background: #eef6ff;
+    }
+
+    .report-table .col-id { width: 70px; }
+    .report-table .col-status { width: 112px; }
+    .report-table .col-dong { width: 120px; }
+    .report-table .col-type { width: 140px; }
+    .report-table .col-risk { width: 170px; }
+    .report-table .col-time { width: 110px; }
+    .report-table .col-desc { width: auto; }
+
+    .status-badge,
+    .risk-badge {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        font-size: 0.72rem;
+        font-weight: 750;
+        padding: 0.28rem 0.52rem;
+        white-space: nowrap;
+    }
+
+    .status-badge {
+        color: #0f766e;
+        background: #ccfbf1;
+        border: 1px solid rgba(20, 184, 166, 0.24);
+    }
+
+    .risk-badge.low {
+        color: #047857;
+        background: #d1fae5;
+    }
+
+    .risk-badge.mid {
+        color: #92400e;
+        background: #fef3c7;
+    }
+
+    .risk-badge.high {
+        color: #b91c1c;
+        background: #fee2e2;
+    }
+
+    .risk-cell {
+        display: grid;
+        gap: 0.38rem;
+    }
+
+    .risk-meter {
+        height: 7px;
+        border-radius: 999px;
+        background: #e2e8f0;
+        overflow: hidden;
+    }
+
+    .risk-meter span {
+        display: block;
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, #14b8a6, #eab308, #ef4444);
+    }
+
+    .desc-text {
+        color: #475569;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
 </style>
 """
@@ -334,6 +497,82 @@ def get_map_click_coords(map_data):
             return float(clicked["lat"]), float(clicked["lng"])
 
     return None
+
+def get_risk_display(intensity):
+    if intensity >= 4:
+        return "높음", "high"
+    if intensity >= 3:
+        return "주의", "mid"
+    return "낮음", "low"
+
+def render_report_status_table(df_reports, selected_dong):
+    df = df_reports.sort_values("id", ascending=False).copy()
+    total_count = len(df)
+    high_count = int((df["intensity"] >= 4).sum()) if total_count else 0
+    avg_intensity = float(df["intensity"].mean()) if total_count else 0
+    filter_label = selected_dong if selected_dong != "전체" else "전체 동"
+
+    rows = []
+    for _, report in df.iterrows():
+        report_id = coerce_int(report.get("id"), 0)
+        intensity = max(1, min(5, coerce_int(report.get("intensity"), 3)))
+        risk_label, risk_class = get_risk_display(intensity)
+        meter_width = intensity * 20
+        dong = html.escape(str(report.get("dong", "-")))
+        report_type = html.escape(str(report.get("type", "-")))
+        time_value = html.escape(str(report.get("time", "-")))
+        desc = html.escape(str(report.get("desc", "")).strip() or "설명 없음")
+
+        rows.append(f"""
+            <tr>
+                <td class="col-id">#{report_id}</td>
+                <td class="col-status"><span class="status-badge">기록 완료</span></td>
+                <td class="col-dong">{dong}</td>
+                <td class="col-type">{report_type}</td>
+                <td class="col-risk">
+                    <div class="risk-cell">
+                        <span class="risk-badge {risk_class}">{risk_label} · {intensity}/5</span>
+                        <div class="risk-meter"><span style="width: {meter_width}%"></span></div>
+                    </div>
+                </td>
+                <td class="col-time">{time_value}</td>
+                <td class="col-desc"><div class="desc-text" title="{desc}">{desc}</div></td>
+            </tr>
+        """)
+
+    body = "\n".join(rows)
+    return f"""
+    <div class="report-board">
+        <div class="report-board__header">
+            <div>
+                <div class="report-board__title">업로드 현황</div>
+                <div class="report-board__sub">최근 등록된 신고 데이터를 위치와 위험도 중심으로 정리했습니다.</div>
+            </div>
+            <div class="report-board__meta">
+                <span class="report-pill">필터 {html.escape(str(filter_label))}</span>
+                <span class="report-pill">총 {total_count}건</span>
+                <span class="report-pill">고위험 {high_count}건</span>
+                <span class="report-pill">평균 {avg_intensity:.1f}/5</span>
+            </div>
+        </div>
+        <div class="report-table-wrap">
+            <table class="report-table">
+                <thead>
+                    <tr>
+                        <th class="col-id">ID</th>
+                        <th class="col-status">상태</th>
+                        <th class="col-dong">동</th>
+                        <th class="col-type">유형</th>
+                        <th class="col-risk">위험도</th>
+                        <th class="col-time">시간</th>
+                        <th class="col-desc">설명</th>
+                    </tr>
+                </thead>
+                <tbody>{body}</tbody>
+            </table>
+        </div>
+    </div>
+    """
 
 def load_reports():
     if os.path.exists(REPORTS_FILE):
@@ -523,18 +762,8 @@ with col_left:
             except Exception as e:
                 st.error(f"오류: {e}")
     
-    col_c, col_d = st.columns(2)
-    with col_c:
-        if st.button("🔄 새로고침", use_container_width=True):
-            st.rerun()
-    
-    with col_d:
-        if st.button("🗑️ 전체 삭제", use_container_width=True, type="secondary"):
-            if st.session_state.reports and st.checkbox("정말 삭제?"):
-                st.session_state.reports = []
-                save_reports([])
-                st.success("삭제됨")
-                st.rerun()
+    if st.button("🔄 새로고침", use_container_width=True):
+        st.rerun()
 
 # ========== 우측: 지도 ==========
 with col_right:
@@ -779,7 +1008,7 @@ if st.session_state.reports:
             st.plotly_chart(fig2, use_container_width=True)
 
 # 신고 테이블
-st.markdown("### 📋 상세 신고 목록")
+st.markdown("### 📋 업로드 현황")
 if st.session_state.reports:
     df_reports = pd.DataFrame(normalize_reports(st.session_state.reports))
     if df_reports.empty or "dong" not in df_reports.columns:
@@ -787,15 +1016,11 @@ if st.session_state.reports:
     else:
         if selected_dong != "전체":
             df_reports = df_reports[df_reports["dong"] == selected_dong]
-        
-        df_display = df_reports[["id", "dong", "type", "intensity", "time", "desc"]].copy()
-        df_display.columns = ["ID", "동", "유형", "위험도", "시간", "설명"]
-        
-        st.dataframe(
-            df_display.sort_values("ID", ascending=False),
-            use_container_width=True,
-            height=400,
-        )
+
+        if df_reports.empty:
+            st.info("선택한 동에 표시할 신고 데이터가 없습니다.")
+        else:
+            st.markdown(render_report_status_table(df_reports, selected_dong), unsafe_allow_html=True)
 else:
     st.info("📌 아직 신고가 없습니다. 지도를 클릭하여 신고를 등록해주세요.")
 
