@@ -8,6 +8,7 @@ from datetime import datetime
 import html
 import math
 import streamlit as st
+import streamlit.components.v1 as components
 import folium
 from folium.plugins import HeatMap
 from streamlit_folium import st_folium
@@ -542,6 +543,15 @@ def render_report_status_table(df_reports, selected_dong):
 
     body = "\n".join(rows)
     return f"""
+    {CUSTOM_CSS}
+    <style>
+        body {{
+            margin: 0;
+            padding: 2px 4px 18px;
+            background: transparent;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        }}
+    </style>
     <div class="report-board">
         <div class="report-board__header">
             <div>
@@ -1020,7 +1030,11 @@ if st.session_state.reports:
         if df_reports.empty:
             st.info("선택한 동에 표시할 신고 데이터가 없습니다.")
         else:
-            st.markdown(render_report_status_table(df_reports, selected_dong), unsafe_allow_html=True)
+            components.html(
+                render_report_status_table(df_reports, selected_dong),
+                height=590,
+                scrolling=False,
+            )
 else:
     st.info("📌 아직 신고가 없습니다. 지도를 클릭하여 신고를 등록해주세요.")
 
