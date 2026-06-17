@@ -362,6 +362,8 @@ if "clicked_lat" not in st.session_state:
     st.session_state.clicked_lat = None
 if "clicked_lng" not in st.session_state:
     st.session_state.clicked_lng = None
+if "location_input_version" not in st.session_state:
+    st.session_state.location_input_version = 0
 if "map_click_msg" not in st.session_state:
     st.session_state.map_click_msg = False
 
@@ -418,18 +420,19 @@ with col_left:
         report_type = st.selectbox("위험 유형", ["조명 부족", "시야 차단", "도로 파손", "불법 주정차", "기타"])
         intensity = st.slider("위험도", 1, 5, 3, help="1: 안전 → 5: 매우 위험")
         
-        # 지도에서 클릭한 좌표가 있으면 사용, 없으면 기본값
-        default_lat = st.session_state.clicked_lat if st.session_state.clicked_lat else 37.5630
-        default_lng = st.session_state.clicked_lng if st.session_state.clicked_lng else 126.9945
-        
-        lat = st.number_input("위도", value=default_lat, format="%.4f", key="lat_input")
-        lng = st.number_input("경도", value=default_lng, format="%.4f", key="lng_input")
+        default_lat = st.session_state.clicked_lat if st.session_state.clicked_lat is not None else JUNGGU_CENTER[0]
+        default_lng = st.session_state.clicked_lng if st.session_state.clicked_lng is not None else JUNGGU_CENTER[1]
+        input_version = st.session_state.location_input_version
+        lat = st.number_input("위도", value=float(default_lat), format="%.6f", key=f"lat_input_{input_version}")
+        lng = st.number_input("경도", value=float(default_lng), format="%.6f", key=f"lng_input_{input_version}")
+        selected_report_dong = get_dong_by_coords(lat, lng)
         
         desc = st.text_area("상세 설명", max_chars=100, placeholder="예: 횡단보도 직전 조명 전부 고장...")
         
         # 좌표가 선택되었으면 하이라이트
-        if st.session_state.clicked_lat and st.session_state.clicked_lng:
-            st.success(f"✅ 지도에서 선택된 위치")
+        if st.session_state.clicked_lat is not None and st.session_state.clicked_lng is not None:
+            st.success(f"✅ 지도에서 선택된 위치 · {selected_report_dong}")
+            st.caption(f"위도 {lat:.6f} / 경도 {lng:.6f}")
         else:
             st.info("💡 오른쪽 지도에서 클릭하여 위치 선택!")
         
@@ -451,6 +454,7 @@ with col_left:
             # 클릭 상태 초기화
             st.session_state.clicked_lat = None
             st.session_state.clicked_lng = None
+            st.session_state.location_input_version += 1
             st.session_state.map_click_msg = False
             
             st.success(f"✅ 신고 저장 | {dong}")
@@ -530,10 +534,15 @@ with col_right:
     reports_for_map = normalize_reports(st.session_state.reports)
     bayesian_grid = bayesian_update(st.session_state.grid, reports_for_map)
     
+    selected_map_lat = st.session_state.clicked_lat
+    selected_map_lng = st.session_state.clicked_lng
+    has_selected_location = selected_map_lat is not None and selected_map_lng is not None
+    map_center = [selected_map_lat, selected_map_lng] if has_selected_location else JUNGGU_CENTER
+    
     # 지도 생성
     m = folium.Map(
-        location=JUNGGU_CENTER,
-        zoom_start=13,
+        location=map_center,
+        zoom_start=15 if has_selected_location else 13,
         tiles="CartoDB positron",
         control_scale=True,
         prefer_canvas=True,
@@ -627,6 +636,46 @@ with col_right:
             label=dong_name,
         ).add_to(m)
     
+    if has_selected_location:
+        selected_location_dong = get_dong_by_coords(selected_map_lat, selected_map_lng)
+        selected_popup = f"""
+        <div style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; min-width: 170px;">
+            <div style="font-weight: 700; color: #0f172a; margin-bottom: 4px;">선택한 신고 위치</div>
+            <div style="color: #475569; font-size: 12px;">{selected_location_dong}</div>
+            <div style="color: #475569; font-size: 12px;">위도 {selected_map_lat:.6f}</div>
+            <div style="color: #475569; font-size: 12px;">경도 {selected_map_lng:.6f}</div>
+        </div>
+        """
+        folium.CircleMarker(
+            location=[selected_map_lat, selected_map_lng],
+            radius=16,
+            color="#2563eb",
+            weight=3,
+            opacity=0.95,
+            fill=True,
+            fillColor="#60a5fa",
+            fillOpacity=0.22,
+            popup=folium.Popup(selected_popup, max_width=240),
+            tooltip="선택한 신고 위치",
+        ).add_to(m)
+        folium.Marker(
+            location=[selected_map_lat, selected_map_lng],
+            icon=folium.DivIcon(
+                html="""
+                <div style="
+                    width: 18px;
+                    height: 18px;
+                    margin-left: -9px;
+                    margin-top: -9px;
+                    border-radius: 999px;
+                    background: #2563eb;
+                    border: 3px solid #ffffff;
+                    box-shadow: 0 6px 18px rgba(37, 99, 235, 0.35);
+                "></div>
+                """
+            ),
+        ).add_to(m)
+    
     legend_html = """
     <div style="
         position: fixed;
@@ -662,10 +711,20 @@ with col_right:
     # 클릭 이벤트 처리
     if map_data and map_data.get("last_clicked"):
         clicked = map_data["last_clicked"]
-        st.session_state.clicked_lat = clicked["lat"]
-        st.session_state.clicked_lng = clicked["lng"]
-        st.session_state.map_click_msg = True
-        st.rerun()
+        clicked_lat = float(clicked["lat"])
+        clicked_lng = float(clicked["lng"])
+        is_new_location = (
+            st.session_state.clicked_lat is None
+            or st.session_state.clicked_lng is None
+            or abs(st.session_state.clicked_lat - clicked_lat) > 0.000001
+            or abs(st.session_state.clicked_lng - clicked_lng) > 0.000001
+        )
+        if is_new_location:
+            st.session_state.clicked_lat = clicked_lat
+            st.session_state.clicked_lng = clicked_lng
+            st.session_state.location_input_version += 1
+            st.session_state.map_click_msg = True
+            st.rerun()
 
 # ========== 하단: 분석 ==========
 st.divider()
