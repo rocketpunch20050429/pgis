@@ -412,7 +412,7 @@ if st.session_state.map_click_msg:
     """, unsafe_allow_html=True)
 
 # ========== 메인 레이아웃 ==========
-col_left, col_right = st.columns([1, 2.5])
+col_left, col_right = st.columns([0.9, 3.4], gap="medium")
 
 # ========== 좌측: 신고 폼 ==========
 with col_left:
@@ -719,8 +719,8 @@ with col_right:
     # 지도 렌더링 및 클릭 처리
     map_data = st_folium(
         m,
-        width=700,
-        height=700,
+        width=1040,
+        height=760,
         returned_objects=["last_clicked", "last_object_clicked"],
     )
     
