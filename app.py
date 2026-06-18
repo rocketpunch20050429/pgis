@@ -11,7 +11,6 @@ import streamlit as st
 import streamlit.components.v1 as components
 from branca.element import MacroElement, Template
 import folium
-from folium.plugins import HeatMap
 from streamlit_folium import st_folium
 import pandas as pd
 import numpy as np
@@ -1860,47 +1859,40 @@ with col_right:
         if get_heat_weight(cell["posterior"]) > 0
     ]
     
-    if heat_points:
-        HeatMap(
-            heat_points,
-            radius=42,
-            blur=40,
-            min_opacity=0.02,
-            gradient={
-                0.15: "#10b981",
-                0.45: "#f59e0b",
-                0.70: "#f97316",
-                1.00: "#ef4444",
-            },
-        ).add_to(m)
-        m.get_root().header.add_child(folium.Element("""
-        <style>
-            .leaflet-heatmap-layer {
-                pointer-events: none !important;
-                opacity: 0.28 !important;
-            }
-        </style>
-        """))
+    # 베이지안 분포 — 선택(클릭/우클릭) 시에만 주변 격자 표시
+    _active_lat = (
+        query_lat if (st.session_state.map_focus == "query" and has_query_location)
+        else (selected_map_lat if has_selected_location else None)
+    )
+    _active_lon = (
+        query_lng if (st.session_state.map_focus == "query" and has_query_location)
+        else (selected_map_lng if has_selected_location else None)
+    )
 
-    # 격자 색상 타일 — 틈새 없이 전체 지역 커버
-    for cell in visible_cells:
-        posterior = cell["posterior"]
-        color = get_color(posterior)
-        hw = get_heat_weight(posterior)
-        lat_r = GRID_SIZE_M / 111000 * 0.516
-        lon_r = GRID_SIZE_M / (111000 * math.cos(math.radians(cell["lat"]))) * 0.516
-        folium.Rectangle(
-            bounds=[
-                [cell["lat"] - lat_r, cell["lon"] - lon_r],
-                [cell["lat"] + lat_r, cell["lon"] + lon_r],
-            ],
-            color="none",
-            weight=0,
-            fill=True,
-            fillColor=color,
-            fillOpacity=round(0.055 + hw * 0.175, 3),
-            interactive=False,
-        ).add_to(m)
+    if _active_lat is not None:
+        _show_r = REPORT_INFLUENCE_RADIUS_M * 1.8
+        for cell in visible_cells:
+            dist = haversine_distance(_active_lat, _active_lon, cell["lat"], cell["lon"])
+            if dist > _show_r:
+                continue
+            fade = max(0.0, 1.0 - dist / _show_r)
+            posterior = cell["posterior"]
+            color = get_color(posterior)
+            hw = get_heat_weight(posterior)
+            lat_r = GRID_SIZE_M / 111000 * 0.516
+            lon_r = GRID_SIZE_M / (111000 * math.cos(math.radians(cell["lat"]))) * 0.516
+            folium.Rectangle(
+                bounds=[
+                    [cell["lat"] - lat_r, cell["lon"] - lon_r],
+                    [cell["lat"] + lat_r, cell["lon"] + lon_r],
+                ],
+                color="none",
+                weight=0,
+                fill=True,
+                fillColor=color,
+                fillOpacity=round((0.08 + hw * 0.30) * (0.30 + 0.70 * fade), 3),
+                interactive=False,
+            ).add_to(m)
 
     # 신고 마커 — 커스텀 핀
     _type_cfg = {
