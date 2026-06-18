@@ -1390,6 +1390,8 @@ if "map_click_msg" not in st.session_state:
     st.session_state.map_click_msg = False
 if "map_focus" not in st.session_state:
     st.session_state.map_focus = "register"
+if "sidebar_open" not in st.session_state:
+    st.session_state.sidebar_open = True
 
 # ========== 메인 헤더 ==========
 st.markdown(f"""
@@ -1435,151 +1437,156 @@ if st.session_state.map_click_msg:
     """, unsafe_allow_html=True)
 
 # ========== 메인 레이아웃 ==========
-col_left, col_right = st.columns([0.9, 3.4], gap="medium")
+selected_dong = st.session_state.get("selected_dong", "전체")
+
+_tc, _ = st.columns([0.12, 1])
+with _tc:
+    if st.button("◀ 접기" if st.session_state.sidebar_open else "☰ 신고 폼"):
+        st.session_state.sidebar_open = not st.session_state.sidebar_open
+        st.rerun()
+
+if st.session_state.sidebar_open:
+    col_left, col_right = st.columns([0.9, 3.4], gap="medium")
+else:
+    col_right = st.container()
 
 # ========== 좌측: 신고 폼 ==========
-with col_left:
-    st.markdown("""
-    <div class="pgis-section-head" style="margin-bottom:10px;">
-        <div class="pgis-section-title">
-            <div class="pgis-section-title__icon" style="background:#eff6ff;">📝</div>
-            신고 작성
+if st.session_state.sidebar_open:
+    with col_left:
+        st.markdown("""
+        <div class="pgis-section-head" style="margin-bottom:10px;">
+            <div class="pgis-section-title">
+                <div class="pgis-section-title__icon" style="background:#eff6ff;">📝</div>
+                신고 작성
+            </div>
         </div>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # 동 선택
-    selected_dong = st.selectbox("📍 동 선택", ["전체"] + list(JUNGGU_DONGS.keys()))
-    st.session_state.selected_dong = selected_dong
-    
-    st.markdown("---")
-    
-    # 신고 폼
-    with st.form("report_form", border=True):
-        st.markdown("**새 신고 작성**")
-        
-        report_type = st.selectbox("위험 유형", ["조명 부족", "시야 차단", "도로 파손", "불법 주정차", "기타"])
-        intensity = st.slider("위험도", 1, 5, 3, help="1: 안전 → 5: 매우 위험")
-        
-        default_lat = st.session_state.clicked_lat if st.session_state.clicked_lat is not None else JUNGGU_CENTER[0]
-        default_lng = st.session_state.clicked_lng if st.session_state.clicked_lng is not None else JUNGGU_CENTER[1]
-        input_version = st.session_state.location_input_version
-        lat = st.number_input("위도", value=float(default_lat), format="%.6f", key=f"lat_input_{input_version}")
-        lng = st.number_input("경도", value=float(default_lng), format="%.6f", key=f"lng_input_{input_version}")
-        selected_report_dong = get_dong_by_coords(lat, lng)
-        
-        desc = st.text_area("상세 설명", max_chars=100, placeholder="예: 횡단보도 직전 조명 전부 고장...")
-        
-        # 좌표가 선택되었으면 하이라이트
-        if st.session_state.clicked_lat is not None and st.session_state.clicked_lng is not None:
-            st.success(f"✅ 지도에서 선택된 위치 · {selected_report_dong}")
-            st.caption(f"위도 {lat:.6f} / 경도 {lng:.6f}")
-        else:
-            st.info("💡 오른쪽 지도에서 좌클릭 한 번으로 신고 위치를 선택하세요.")
-        
-        if st.form_submit_button("📌 신고 등록", use_container_width=True):
-            dong = get_dong_by_coords(lat, lng)
-            created_at = datetime.now()
-            new_report = {
-                "id": st.session_state.next_id,
-                "lng": lng,
-                "lat": lat,
-                "type": report_type,
-                "intensity": intensity,
-                "time": created_at.strftime("%m-%d %H:%M"),
-                "created_at": created_at.isoformat(timespec="minutes"),
-                "desc": desc,
-                "dong": dong,
-            }
-            saved_report = persist_report(new_report)
-            if saved_report:
-                st.session_state.reports.append(saved_report)
-                st.session_state.next_id = max(st.session_state.next_id, saved_report["id"] + 1)
-                save_reports(st.session_state.reports)
-            
-                # 클릭 상태 초기화
-                st.session_state.clicked_lat = None
-                st.session_state.clicked_lng = None
-                st.session_state.location_input_version += 1
-                st.session_state.map_click_msg = False
+        """, unsafe_allow_html=True)
 
-                st.success(f"✅ 신고 저장 | {dong}")
-                st.rerun()
-    
-    st.markdown("---")
-    
-    st.markdown("""
-    <div class="pgis-section-head" style="margin-bottom:8px;">
-        <div class="pgis-section-title">
-            <div class="pgis-section-title__icon" style="background:#f5f3ff;">📊</div>
-            데이터 관리
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    col_a, col_b = st.columns(2)
-    with col_a:
-        if st.button("⬇️ CSV 다운로드", use_container_width=True):
-            if st.session_state.reports:
-                df = pd.DataFrame(normalize_reports(st.session_state.reports))
-                export_columns = ["id", "lat", "lng", "dong", "type", "intensity", "time", "created_at", "desc"]
-                df = df[[col for col in export_columns if col in df.columns]]
-                csv = df.to_csv(index=False, encoding="utf-8-sig")
-                st.download_button(
-                    "지도 데이터 CSV 다운로드",
-                    csv,
-                    f"pgis_map_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                    "text/csv",
-                    use_container_width=True
-                )
+        # 동 선택
+        selected_dong = st.selectbox("📍 동 선택", ["전체"] + list(JUNGGU_DONGS.keys()))
+        st.session_state.selected_dong = selected_dong
+
+        st.markdown("---")
+
+        # 신고 폼
+        with st.form("report_form", border=True):
+            st.markdown("**새 신고 작성**")
+
+            report_type = st.selectbox("위험 유형", ["조명 부족", "시야 차단", "도로 파손", "불법 주정차", "기타"])
+            intensity = st.slider("위험도", 1, 5, 3, help="1: 안전 → 5: 매우 위험")
+
+            default_lat = st.session_state.clicked_lat if st.session_state.clicked_lat is not None else JUNGGU_CENTER[0]
+            default_lng = st.session_state.clicked_lng if st.session_state.clicked_lng is not None else JUNGGU_CENTER[1]
+            input_version = st.session_state.location_input_version
+            lat = st.number_input("위도", value=float(default_lat), format="%.6f", key=f"lat_input_{input_version}")
+            lng = st.number_input("경도", value=float(default_lng), format="%.6f", key=f"lng_input_{input_version}")
+            selected_report_dong = get_dong_by_coords(lat, lng)
+
+            desc = st.text_area("상세 설명", max_chars=100, placeholder="예: 횡단보도 직전 조명 전부 고장...")
+
+            if st.session_state.clicked_lat is not None and st.session_state.clicked_lng is not None:
+                st.success(f"✅ 지도에서 선택된 위치 · {selected_report_dong}")
+                st.caption(f"위도 {lat:.6f} / 경도 {lng:.6f}")
             else:
-                st.info("신고 데이터가 없습니다")
-    
-    with col_b:
-        if st.button("📤 CSV 업로드", use_container_width=True):
-            st.session_state.show_upload = True
-    
-    if st.session_state.get("show_upload", False):
-        uploaded = st.file_uploader("CSV 파일 선택", type=["csv"])
-        if uploaded and st.button("업로드 실행"):
-            try:
-                df = pd.read_csv(uploaded)
-                uploaded_at = datetime.now()
-                saved_count = 0
-                skipped_count = 0
-                last_uploaded_report = None
-                for _, row in df.iterrows():
-                    new_report = build_report_from_csv_row(row, st.session_state.next_id, uploaded_at)
-                    if not new_report:
-                        skipped_count += 1
-                        continue
+                st.info("💡 오른쪽 지도에서 좌클릭 한 번으로 신고 위치를 선택하세요.")
 
-                    saved_report = persist_report(new_report)
-                    if saved_report:
-                        st.session_state.reports.append(saved_report)
-                        st.session_state.next_id = max(st.session_state.next_id, saved_report["id"] + 1)
-                        saved_count += 1
-                        last_uploaded_report = saved_report
-                
-                save_reports(st.session_state.reports)
-                if last_uploaded_report:
-                    st.session_state.clicked_lat = last_uploaded_report["lat"]
-                    st.session_state.clicked_lng = last_uploaded_report["lng"]
+            if st.form_submit_button("📌 신고 등록", use_container_width=True):
+                dong = get_dong_by_coords(lat, lng)
+                created_at = datetime.now()
+                new_report = {
+                    "id": st.session_state.next_id,
+                    "lng": lng,
+                    "lat": lat,
+                    "type": report_type,
+                    "intensity": intensity,
+                    "time": created_at.strftime("%m-%d %H:%M"),
+                    "created_at": created_at.isoformat(timespec="minutes"),
+                    "desc": desc,
+                    "dong": dong,
+                }
+                saved_report = persist_report(new_report)
+                if saved_report:
+                    st.session_state.reports.append(saved_report)
+                    st.session_state.next_id = max(st.session_state.next_id, saved_report["id"] + 1)
+                    save_reports(st.session_state.reports)
+                    st.session_state.clicked_lat = None
+                    st.session_state.clicked_lng = None
                     st.session_state.location_input_version += 1
-                    st.session_state.map_click_msg = True
-                    st.session_state.map_focus = "register"
+                    st.session_state.map_click_msg = False
+                    st.success(f"✅ 신고 저장 | {dong}")
+                    st.rerun()
 
-                if skipped_count:
-                    st.warning(f"✅ {saved_count}건 업로드 · 위도/경도 누락 {skipped_count}건 제외")
+        st.markdown("---")
+
+        st.markdown("""
+        <div class="pgis-section-head" style="margin-bottom:8px;">
+            <div class="pgis-section-title">
+                <div class="pgis-section-title__icon" style="background:#f5f3ff;">📊</div>
+                데이터 관리
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        col_a, col_b = st.columns(2)
+        with col_a:
+            if st.button("⬇️ CSV 다운로드", use_container_width=True):
+                if st.session_state.reports:
+                    df = pd.DataFrame(normalize_reports(st.session_state.reports))
+                    export_columns = ["id", "lat", "lng", "dong", "type", "intensity", "time", "created_at", "desc"]
+                    df = df[[col for col in export_columns if col in df.columns]]
+                    csv = df.to_csv(index=False, encoding="utf-8-sig")
+                    st.download_button(
+                        "지도 데이터 CSV 다운로드",
+                        csv,
+                        f"pgis_map_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                        "text/csv",
+                        use_container_width=True
+                    )
                 else:
-                    st.success(f"✅ {saved_count}건 업로드")
-                st.session_state.show_upload = False
-                st.rerun()
-            except Exception as e:
-                st.error(f"오류: {e}")
-    
-    if st.button("🔄 새로고침", use_container_width=True):
-        st.rerun()
+                    st.info("신고 데이터가 없습니다")
+
+        with col_b:
+            if st.button("📤 CSV 업로드", use_container_width=True):
+                st.session_state.show_upload = True
+
+        if st.session_state.get("show_upload", False):
+            uploaded = st.file_uploader("CSV 파일 선택", type=["csv"])
+            if uploaded and st.button("업로드 실행"):
+                try:
+                    df = pd.read_csv(uploaded)
+                    uploaded_at = datetime.now()
+                    saved_count = 0
+                    skipped_count = 0
+                    last_uploaded_report = None
+                    for _, row in df.iterrows():
+                        new_report = build_report_from_csv_row(row, st.session_state.next_id, uploaded_at)
+                        if not new_report:
+                            skipped_count += 1
+                            continue
+                        saved_report = persist_report(new_report)
+                        if saved_report:
+                            st.session_state.reports.append(saved_report)
+                            st.session_state.next_id = max(st.session_state.next_id, saved_report["id"] + 1)
+                            saved_count += 1
+                            last_uploaded_report = saved_report
+                    save_reports(st.session_state.reports)
+                    if last_uploaded_report:
+                        st.session_state.clicked_lat = last_uploaded_report["lat"]
+                        st.session_state.clicked_lng = last_uploaded_report["lng"]
+                        st.session_state.location_input_version += 1
+                        st.session_state.map_click_msg = True
+                        st.session_state.map_focus = "register"
+                    if skipped_count:
+                        st.warning(f"✅ {saved_count}건 업로드 · 위도/경도 누락 {skipped_count}건 제외")
+                    else:
+                        st.success(f"✅ {saved_count}건 업로드")
+                    st.session_state.show_upload = False
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"오류: {e}")
+
+        if st.button("🔄 새로고침", use_container_width=True):
+            st.rerun()
 
 # ========== 우측: 지도 ==========
 with col_right:
@@ -1832,22 +1839,6 @@ with col_right:
             location=[report["lat"], report["lng"]],
             tooltip=folium.Tooltip(tip_html, sticky=True),
             icon=folium.Icon(color=type_colors.get(report["type"], "gray"), icon_color="white", icon="info-sign"),
-        ).add_to(m)
-    
-    # 동 경계
-    for dong_name, dong_data in JUNGGU_DONGS.items():
-        if selected_dong != "전체" and dong_name != selected_dong:
-            continue
-        b = dong_data["bounds"]
-        folium.Rectangle(
-            bounds=[[b["south"], b["west"]], [b["north"], b["east"]]],
-            color="#475569",
-            fill=False,
-            weight=1.2,
-            opacity=0.55,
-            dash_array="4, 6",
-            interactive=False,
-            label=dong_name,
         ).add_to(m)
     
     if st.session_state.map_focus == "query" and has_query_location and query_stats:
