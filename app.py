@@ -732,7 +732,7 @@ def build_query_popup_html(lat, lng, dong, stats, reports):
 
     if context["nearby_reports"]:
         report_rows = []
-        for item in context["nearby_reports"][:3]:
+        for item in context["nearby_reports"][:2]:
             report = item["report"]
             report_type = html.escape(str(report.get("type", "신고")))
             report_time = html.escape(str(report.get("time", "-")))
@@ -757,16 +757,16 @@ def build_query_popup_html(lat, lng, dong, stats, reports):
         """
 
     return f"""
-    <div class="query-risk-popup" style="width:372px; overflow:hidden; font-family:system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color:#0f172a; border-radius:14px; background:#ffffff;">
-        <div style="padding:16px 17px 15px; color:#ffffff; background:linear-gradient(135deg, #172033 0%, #31526b 58%, {grade['color']} 100%);">
+    <div class="query-risk-popup" style="width:320px; max-height:390px; overflow-y:auto; overflow-x:hidden; font-family:system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color:#0f172a; border-radius:14px; background:#ffffff;">
+        <div style="padding:13px 14px 12px; color:#ffffff; background:linear-gradient(135deg, #172033 0%, #31526b 58%, {grade['color']} 100%);">
             <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
                 <div style="font-size:12px; opacity:0.86; font-weight:650;">예상 사고 가능성</div>
                 <div style="padding:5px 9px; border-radius:999px; background:rgba(255,255,255,0.18); border:1px solid rgba(255,255,255,0.24); font-size:11px; font-weight:800;">{grade['label']}</div>
             </div>
-            <div style="display:flex; align-items:flex-end; justify-content:space-between; gap:12px; margin-top:10px;">
+            <div style="display:flex; align-items:flex-end; justify-content:space-between; gap:10px; margin-top:9px;">
                 <div>
-                    <div style="font-size:34px; line-height:1; font-weight:850;">{probability:.2%}</div>
-                    <div style="font-size:12px; opacity:0.86; margin-top:7px;">{html.escape(dong)} · 위도 {lat:.5f}, 경도 {lng:.5f}</div>
+                    <div style="font-size:29px; line-height:1; font-weight:850;">{probability:.2%}</div>
+                    <div style="font-size:11px; opacity:0.86; margin-top:6px;">{html.escape(dong)} · {lat:.5f}, {lng:.5f}</div>
                 </div>
                 <div style="font-size:11px; text-align:right; opacity:0.88;">살펴본 범위<br/><b>{REPORT_INFLUENCE_RADIUS_M}m</b></div>
             </div>
@@ -775,31 +775,31 @@ def build_query_popup_html(lat, lng, dong, stats, reports):
             </div>
         </div>
 
-        <div style="padding:14px 16px 15px;">
+        <div style="padding:12px 13px 13px;">
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-                <div style="padding:10px; border:1px solid #e5e7eb; border-radius:10px; background:#f8fafc;">
+                <div style="padding:8px 9px; border:1px solid #e5e7eb; border-radius:10px; background:#f8fafc;">
                     <div style="font-size:11px; color:#64748b; font-weight:700;">근처 신고</div>
-                    <div style="font-size:18px; font-weight:850; margin-top:3px;">{stats['report_count']}건</div>
+                    <div style="font-size:17px; font-weight:850; margin-top:2px;">{stats['report_count']}건</div>
                 </div>
-                <div style="padding:10px; border:1px solid #e5e7eb; border-radius:10px; background:#f8fafc;">
+                <div style="padding:8px 9px; border:1px solid #e5e7eb; border-radius:10px; background:#f8fafc;">
                     <div style="font-size:11px; color:#64748b; font-weight:700;">가까운 신고</div>
-                    <div style="font-size:18px; font-weight:850; margin-top:3px;">{nearest_text}</div>
+                    <div style="font-size:17px; font-weight:850; margin-top:2px;">{nearest_text}</div>
                 </div>
-                <div style="padding:10px; border:1px solid #e5e7eb; border-radius:10px; background:#f8fafc;">
+                <div style="padding:8px 9px; border:1px solid #e5e7eb; border-radius:10px; background:#f8fafc;">
                     <div style="font-size:11px; color:#64748b; font-weight:700;">근처 위험도 평균</div>
-                    <div style="font-size:18px; font-weight:850; margin-top:3px;">{context['avg_intensity']:.1f}/5</div>
+                    <div style="font-size:17px; font-weight:850; margin-top:2px;">{context['avg_intensity']:.1f}/5</div>
                 </div>
-                <div style="padding:10px; border:1px solid #e5e7eb; border-radius:10px; background:#f8fafc;">
+                <div style="padding:8px 9px; border:1px solid #e5e7eb; border-radius:10px; background:#f8fafc;">
                     <div style="font-size:11px; color:#64748b; font-weight:700;">주요 유형</div>
-                    <div style="font-size:15px; font-weight:850; margin-top:5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{dominant_type}</div>
+                    <div style="font-size:14px; font-weight:850; margin-top:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{dominant_type}</div>
                 </div>
             </div>
 
-            <div style="margin-top:11px; padding:11px 12px; border-radius:10px; background:{grade['soft']}; border:1px solid rgba(15,23,42,0.07); color:#334155; font-size:12px; line-height:1.45;">
+            <div style="margin-top:10px; padding:10px 11px; border-radius:10px; background:{grade['soft']}; border:1px solid rgba(15,23,42,0.07); color:#334155; font-size:12px; line-height:1.42;">
                 {grade['text']}
             </div>
 
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:12px;">
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px;">
                 <div>
                     <div style="display:flex; justify-content:space-between; font-size:11px; color:#64748b; font-weight:700;">
                         <span>참고할 신고</span><span>{context['confidence_label']}</span>
@@ -818,7 +818,7 @@ def build_query_popup_html(lat, lng, dong, stats, reports):
                 </div>
             </div>
 
-            <div style="margin-top:13px; display:grid; grid-template-columns:repeat(3, 1fr); gap:7px; text-align:center;">
+            <div style="margin-top:11px; display:grid; grid-template-columns:repeat(3, 1fr); gap:7px; text-align:center;">
                 <div style="border-radius:9px; background:#f8fafc; padding:8px 4px;">
                     <div style="font-size:10px; color:#64748b; font-weight:700;">기본 위험</div>
                     <div style="font-size:13px; font-weight:850; margin-top:2px;">10.0%</div>
@@ -833,7 +833,7 @@ def build_query_popup_html(lat, lng, dong, stats, reports):
                 </div>
             </div>
 
-            <div style="margin-top:13px;">
+            <div style="margin-top:11px;">
                 <div style="font-size:12px; font-weight:850; margin-bottom:2px;">계산에 참고한 신고</div>
                 {nearby_html}
             </div>
@@ -920,6 +920,34 @@ class BottomRightZoomControl(MacroElement):
         L.control.zoom({ position: "bottomright" }).addTo({{ this._parent.get_name() }});
     {% endmacro %}
     """)
+
+class QueryPredictionPopup(MacroElement):
+    _template = Template("""
+    {% macro script(this, kwargs) %}
+        L.popup({
+            className: "query-risk-popup-shell",
+            minWidth: {{ this.width }},
+            maxWidth: {{ this.width }},
+            autoPan: false,
+            keepInView: false,
+            closeButton: true,
+            closeOnClick: true,
+            offset: L.point(0, {{ this.offset_y }})
+        })
+        .setLatLng([{{ this.lat }}, {{ this.lng }}])
+        .setContent({{ this.content_json|safe }})
+        .openOn({{ this._parent.get_name() }});
+    {% endmacro %}
+    """)
+
+    def __init__(self, lat, lng, content_html, width=320, offset_y=-24):
+        super().__init__()
+        self._name = "QueryPredictionPopup"
+        self.lat = lat
+        self.lng = lng
+        self.content_json = json.dumps(content_html, ensure_ascii=False)
+        self.width = width
+        self.offset_y = offset_y
 
 def render_report_status_table(df_reports, selected_dong):
     df = df_reports.sort_values("id", ascending=False).copy()
@@ -1401,13 +1429,6 @@ with col_right:
         calculate_bayesian_stats_for_point(query_lat, query_lng, reports_for_map)
         if has_query_location else None
     )
-    if query_stats:
-        query_dong = get_dong_by_coords(query_lat, query_lng)
-        st.info(
-            f"우클릭 조회 · {query_dong} · 예상 사고확률 {query_stats['posterior']:.2%} "
-            f"· 영향 신고 {query_stats['report_count']}건"
-        )
-    
     selected_map_lat = st.session_state.clicked_lat
     selected_map_lng = st.session_state.clicked_lng
     has_selected_location = selected_map_lat is not None and selected_map_lng is not None
@@ -1433,18 +1454,28 @@ with col_right:
     BottomRightZoomControl().add_to(m)
     m.get_root().header.add_child(folium.Element("""
     <style>
-        .leaflet-popup:has(.query-risk-popup) .leaflet-popup-content-wrapper {
+        .query-risk-popup-shell {
+            margin-bottom: 14px !important;
+        }
+        .query-risk-popup-shell .leaflet-popup-content-wrapper {
             padding: 0 !important;
             border-radius: 16px !important;
             overflow: hidden;
             box-shadow: 0 22px 52px rgba(15, 23, 42, 0.22) !important;
         }
-        .leaflet-popup:has(.query-risk-popup) .leaflet-popup-content {
+        .query-risk-popup-shell .leaflet-popup-content {
             margin: 0 !important;
-            width: 372px !important;
+            width: 320px !important;
         }
-        .leaflet-popup:has(.query-risk-popup) .leaflet-popup-tip {
+        .query-risk-popup-shell .leaflet-popup-tip {
             box-shadow: 0 8px 20px rgba(15, 23, 42, 0.16) !important;
+        }
+        .query-risk-popup::-webkit-scrollbar {
+            width: 7px;
+        }
+        .query-risk-popup::-webkit-scrollbar-thumb {
+            background: rgba(100, 116, 139, 0.38);
+            border-radius: 999px;
         }
     </style>
     """))
@@ -1554,9 +1585,9 @@ with col_right:
             fill=True,
             fillColor=probability_color,
             fillOpacity=0.24,
-            popup=folium.Popup(query_popup, max_width=420, show=True),
             tooltip=f"예상 사고확률 {probability:.1%}",
         ).add_to(m)
+        QueryPredictionPopup(query_lat, query_lng, query_popup).add_to(m)
     
     if has_selected_location:
         selected_location_dong = get_dong_by_coords(selected_map_lat, selected_map_lng)
