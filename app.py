@@ -4,7 +4,7 @@ Bayesian PGIS 서울 중구 안전지도 - 지도 클릭 직접 입력
 
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 import html
 import math
 import streamlit as st
@@ -33,7 +33,7 @@ REPORT_DENSITY_SATURATION = 2.2
 BACKGROUND_LIKELIHOOD = 0.07
 FALSE_ALARM_RATE = 0.10
 MAX_PRIOR_BOOST = 0.22
-RIGHT_CLICK_REGISTER_TOKEN = "__RIGHT_CLICK_REGISTER__"
+RIGHT_CLICK_QUERY_TOKEN = "__RIGHT_CLICK_QUERY__"
 REPORTS_FILE = os.path.join(os.path.dirname(__file__), "reports.json")
 
 # ========== 중구 행정동 데이터 ==========
@@ -422,6 +422,81 @@ def normalize_reports(reports):
 
     return normalized_reports
 
+def parse_report_datetime(report, today=None):
+    if not isinstance(report, dict):
+        return None
+
+    today = today or datetime.now().date()
+    for key in ("created_at", "timestamp", "datetime", "date", "time"):
+        value = report.get(key)
+        if value is None:
+            continue
+
+        if isinstance(value, datetime):
+            return value
+
+        text = str(value).strip()
+        if not text:
+            continue
+
+        try:
+            return datetime.fromisoformat(text.replace("Z", "+00:00"))
+        except ValueError:
+            pass
+
+        for fmt in ("%Y-%m-%d %H:%M", "%Y/%m/%d %H:%M", "%Y-%m-%d", "%Y/%m/%d"):
+            try:
+                return datetime.strptime(text, fmt)
+            except ValueError:
+                continue
+
+        for fmt in ("%m-%d %H:%M", "%m/%d %H:%M", "%m-%d", "%m/%d"):
+            try:
+                parsed = datetime.strptime(text, fmt).replace(year=today.year)
+                if parsed.date() > today:
+                    parsed = parsed.replace(year=today.year - 1)
+                return parsed
+            except ValueError:
+                continue
+
+        try:
+            parsed_time = datetime.strptime(text, "%H:%M").time()
+            return datetime.combine(today, parsed_time)
+        except ValueError:
+            continue
+
+    return None
+
+def filter_reports_by_date(reports, target_date, today=None):
+    today = today or datetime.now().date()
+    return [
+        report for report in reports
+        if (parsed := parse_report_datetime(report, today)) is not None
+        and parsed.date() == target_date
+    ]
+
+def summarize_reports(reports):
+    count = len(reports)
+    avg_intensity = np.mean([r["intensity"] for r in reports]) if reports else 0
+    high_risk_count = len([r for r in reports if r["intensity"] >= 4])
+    return {
+        "count": count,
+        "avg_intensity": float(avg_intensity),
+        "high_risk_count": high_risk_count,
+    }
+
+def format_metric_delta(current, previous, unit, decimals=0):
+    diff = current - previous
+    if decimals:
+        if abs(diff) < 0.05:
+            return f"±0.0{unit} 전일 대비"
+        return f"{diff:+.{decimals}f}{unit} 전일 대비"
+
+    diff = int(diff)
+    if diff == 0:
+        return f"±0{unit} 전일 대비"
+    return f"{diff:+d}{unit} 전일 대비"
+
 def create_grid():
     """주소 기반 격자 생성"""
     grid = []
@@ -538,19 +613,19 @@ def get_map_interaction(map_data):
     if not map_data:
         return None
 
+    clicked = map_data.get("last_clicked")
+    if isinstance(clicked, dict) and clicked.get("lat") is not None and clicked.get("lng") is not None:
+        return "register", float(clicked["lat"]), float(clicked["lng"])
+
     object_tooltip = map_data.get("last_object_clicked_tooltip")
     object_clicked = map_data.get("last_object_clicked")
     if (
-        object_tooltip == RIGHT_CLICK_REGISTER_TOKEN
+        object_tooltip == RIGHT_CLICK_QUERY_TOKEN
         and isinstance(object_clicked, dict)
         and object_clicked.get("lat") is not None
         and object_clicked.get("lng") is not None
     ):
-        return "register", float(object_clicked["lat"]), float(object_clicked["lng"])
-
-    clicked = map_data.get("last_clicked")
-    if isinstance(clicked, dict) and clicked.get("lat") is not None and clicked.get("lng") is not None:
-        return "query", float(clicked["lat"]), float(clicked["lng"])
+        return "query", float(object_clicked["lat"]), float(object_clicked["lng"])
 
     return None
 
@@ -561,13 +636,10 @@ def get_risk_display(intensity):
         return "주의", "mid"
     return "낮음", "low"
 
-class RightClickRegisterHandler(MacroElement):
+class RightClickQueryHandler(MacroElement):
     _template = Template(f"""
     {{% macro script(this, kwargs) %}}
         const map = {{{{ this._parent.get_name() }}}};
-        let pendingRightClick = null;
-        const doubleRightClickMs = 900;
-        const doubleRightClickMaxDistancePx = 26;
 
         map.on("contextmenu", function(e) {{
             if (e.originalEvent) {{
@@ -576,39 +648,19 @@ class RightClickRegisterHandler(MacroElement):
             }}
 
             const coords = {{ lat: e.latlng.lat, lng: e.latlng.lng }};
-            const clickPoint = map.latLngToContainerPoint(e.latlng);
-            const now = Date.now();
-            const isSecondClick = pendingRightClick
-                && now - pendingRightClick.time <= doubleRightClickMs
-                && clickPoint.distanceTo(pendingRightClick.point) <= doubleRightClickMaxDistancePx;
-
-            pendingRightClick = {{
-                time: now,
-                point: clickPoint,
-                coords: coords
-            }};
-
-            if (!isSecondClick) {{
-                return;
-            }}
-
-            pendingRightClick = null;
             const globalData = window.__GLOBAL_DATA__;
             if (!globalData || !window.Streamlit) {{
                 return;
             }}
 
             globalData.last_object_clicked = coords;
-            globalData.last_object_clicked_tooltip = "{RIGHT_CLICK_REGISTER_TOKEN}";
+            globalData.last_object_clicked_tooltip = "{RIGHT_CLICK_QUERY_TOKEN}";
             globalData.last_object_clicked_popup = null;
 
-            const lastClicked = globalData.lat_lng_clicked
-                ? {{ lat: globalData.lat_lng_clicked.lat, lng: globalData.lat_lng_clicked.lng }}
-                : null;
             const data = {{
-                last_clicked: lastClicked,
+                last_clicked: null,
                 last_object_clicked: coords,
-                last_object_clicked_tooltip: "{RIGHT_CLICK_REGISTER_TOKEN}",
+                last_object_clicked_tooltip: "{RIGHT_CLICK_QUERY_TOKEN}",
                 last_object_clicked_popup: null
             }};
             globalData.previous_data = data;
@@ -746,24 +798,48 @@ if "map_click_msg" not in st.session_state:
 st.markdown(f"""
 <div class="header-main">
     <h1>🗺️ 서울 중구 안전지도</h1>
-    <p>베이지안 정리 기반 | 지도 클릭으로 신고하기 | {len(st.session_state.grid):,}개 격자 분석</p>
+    <p>베이지안 정리 기반 | 좌클릭 신고·우클릭 조회 | 전일 대비 지표 | {len(st.session_state.grid):,}개 격자 분석</p>
 </div>
 """, unsafe_allow_html=True)
 
 # ========== 메트릭 ==========
+today = datetime.now().date()
+yesterday = today - timedelta(days=1)
+today_reports = filter_reports_by_date(st.session_state.reports, today, today)
+yesterday_reports = filter_reports_by_date(st.session_state.reports, yesterday, today)
+overall_stats = summarize_reports(st.session_state.reports)
+today_stats = summarize_reports(today_reports)
+yesterday_stats = summarize_reports(yesterday_reports)
+
 col1, col2, col3, col4, col5 = st.columns(5)
 with col1:
-    st.metric("📊 총 신고", len(st.session_state.reports), "건")
+    st.metric(
+        "📊 총 신고",
+        overall_stats["count"],
+        format_metric_delta(today_stats["count"], yesterday_stats["count"], "건"),
+        delta_color="inverse",
+        help="전체 누적 신고 수입니다. 변화량은 오늘 신고 건수에서 어제 신고 건수를 뺀 값입니다.",
+    )
 with col2:
-    avg_intensity = np.mean([r["intensity"] for r in st.session_state.reports]) if st.session_state.reports else 0
-    st.metric("📈 평균 위험도", f"{avg_intensity:.1f}", "/5")
+    st.metric(
+        "📈 평균 위험도",
+        f"{overall_stats['avg_intensity']:.1f}",
+        format_metric_delta(today_stats["avg_intensity"], yesterday_stats["avg_intensity"], "점", 1),
+        delta_color="inverse",
+        help="전체 신고의 평균 위험도입니다. 변화량은 오늘 평균 위험도와 어제 평균 위험도의 차이입니다.",
+    )
 with col3:
-    high_risk_count = len([r for r in st.session_state.reports if r["intensity"] >= 4])
-    st.metric("🔴 고위험", high_risk_count, "건")
+    st.metric(
+        "🔴 고위험",
+        overall_stats["high_risk_count"],
+        format_metric_delta(today_stats["high_risk_count"], yesterday_stats["high_risk_count"], "건"),
+        delta_color="inverse",
+        help="위험도 4점 이상 신고의 누적 수입니다. 변화량은 오늘 고위험 신고 수와 어제 고위험 신고 수의 차이입니다.",
+    )
 with col4:
-    st.metric("📍 격자 셀", len(st.session_state.grid), "개")
+    st.metric("📍 격자 셀", len(st.session_state.grid), "±0개 전일 대비", delta_color="off")
 with col5:
-    st.metric("🏘️ 동 구분", len(JUNGGU_DONGS), "개")
+    st.metric("🏘️ 동 구분", len(JUNGGU_DONGS), "±0개 전일 대비", delta_color="off")
 
 st.divider()
 
@@ -809,17 +885,19 @@ with col_left:
             st.success(f"✅ 지도에서 선택된 위치 · {selected_report_dong}")
             st.caption(f"위도 {lat:.6f} / 경도 {lng:.6f}")
         else:
-            st.info("💡 오른쪽 지도에서 같은 지점 근처를 빠르게 두 번 우클릭하여 신고 위치 선택!")
+            st.info("💡 오른쪽 지도에서 좌클릭 한 번으로 신고 위치를 선택하세요.")
         
         if st.form_submit_button("📌 신고 등록", use_container_width=True):
             dong = get_dong_by_coords(lat, lng)
+            created_at = datetime.now()
             st.session_state.reports.append({
                 "id": st.session_state.next_id,
                 "lng": lng,
                 "lat": lat,
                 "type": report_type,
                 "intensity": intensity,
-                "time": datetime.now().strftime("%m-%d %H:%M"),
+                "time": created_at.strftime("%m-%d %H:%M"),
+                "created_at": created_at.isoformat(timespec="minutes"),
                 "desc": desc,
                 "dong": dong,
             })
@@ -865,16 +943,23 @@ with col_left:
         if uploaded and st.button("업로드 실행"):
             try:
                 df = pd.read_csv(uploaded)
+                uploaded_at = datetime.now()
                 for _, row in df.iterrows():
                     lat = float(row.get("lat", 37.5630))
                     lng = float(row.get("lng", row.get("lon", 126.9945)))
+                    row_created_at = row.get("created_at", None)
+                    if pd.isna(row_created_at):
+                        row_created_at = row.get("timestamp", uploaded_at.isoformat(timespec="minutes"))
+                    if pd.isna(row_created_at):
+                        row_created_at = uploaded_at.isoformat(timespec="minutes")
                     st.session_state.reports.append({
                         "id": st.session_state.next_id,
                         "lng": lng,
                         "lat": lat,
                         "type": str(row.get("type", "신고")),
                         "intensity": int(row.get("intensity", 3)),
-                        "time": str(row.get("time", datetime.now().strftime("%m-%d %H:%M"))),
+                        "time": str(row.get("time", uploaded_at.strftime("%m-%d %H:%M"))),
+                        "created_at": str(row_created_at),
                         "desc": str(row.get("desc", "")),
                         "dong": get_dong_by_coords(lat, lng),
                     })
@@ -893,7 +978,7 @@ with col_left:
 # ========== 우측: 지도 ==========
 with col_right:
     st.markdown("### 🎯 베이지안 위험도 지도")
-    st.markdown("💡 **좌클릭: 예상 사고확률 조회 · 우클릭 2회: 신고 위치 등록**", help="같은 지점 근처를 빠르게 두 번 우클릭하면 좌표가 왼쪽 신고 폼에 자동으로 입력됩니다")
+    st.markdown("💡 **좌클릭: 신고 위치 등록 · 우클릭: 예상 사고확률 조회**", help="좌클릭한 좌표는 왼쪽 신고 폼에 입력되고, 우클릭한 좌표는 베이지안 예상 사고확률을 조회합니다.")
     
     # 베이지안 계산
     reports_for_map = normalize_reports(st.session_state.reports)
@@ -908,7 +993,7 @@ with col_right:
     if query_stats:
         query_dong = get_dong_by_coords(query_lat, query_lng)
         st.info(
-            f"좌클릭 조회 · {query_dong} · 예상 사고확률 {query_stats['posterior']:.2%} "
+            f"우클릭 조회 · {query_dong} · 예상 사고확률 {query_stats['posterior']:.2%} "
             f"· 영향 신고 {query_stats['report_count']}건"
         )
     
@@ -925,7 +1010,7 @@ with col_right:
         control_scale=True,
         prefer_canvas=True,
     )
-    RightClickRegisterHandler().add_to(m)
+    RightClickQueryHandler().add_to(m)
     
     # 위험도 레이어
     visible_cells = [
@@ -1211,7 +1296,7 @@ if st.session_state.reports:
                 scrolling=False,
             )
 else:
-    st.info("📌 아직 신고가 없습니다. 지도를 클릭하여 신고를 등록해주세요.")
+    st.info("📌 아직 신고가 없습니다. 지도에서 좌클릭 한 번으로 신고 위치를 등록해주세요.")
 
 # ========== 푸터 ==========
 st.divider()
