@@ -783,27 +783,27 @@ def get_probability_grade(probability):
             "label": "고위험",
             "color": "#d85745",
             "soft": "#fff1f0",
-            "text": "근처 신고가 많고 위험도도 높습니다. 현장 확인을 먼저 하는 것이 좋습니다.",
+            "text": "이 지역은 위험도가 높습니다. 가능하면 주의해서 이동하세요.",
         }
     if probability >= 0.30:
         return {
             "label": "주의",
             "color": "#e9873f",
             "soft": "#fff7ed",
-            "text": "근처에 위험 신호가 일부 있습니다. 같은 문제가 반복되는지 지켜볼 필요가 있습니다.",
+            "text": "주변에 위험 신고가 있습니다. 이동 시 주변 상황을 확인하세요.",
         }
     if probability >= 0.16:
         return {
             "label": "관찰",
             "color": "#d6bd3f",
             "soft": "#fefce8",
-            "text": "현재는 중간 정도입니다. 근처 신고가 더 쌓이면 결과가 달라질 수 있습니다.",
+            "text": "현재 위험도는 중간 수준입니다. 상황 변화를 지켜보세요.",
         }
     return {
         "label": "낮음",
         "color": "#6cc3b0",
         "soft": "#ecfdf5",
-        "text": "현재 근처 신고 영향은 크지 않습니다. 그래도 현장 상황은 계속 바뀔 수 있습니다.",
+        "text": "현재 이 지역의 위험도는 낮습니다. 안전한 상태입니다.",
     }
 
 def format_distance(distance_m):
@@ -866,7 +866,8 @@ def build_query_popup_html(lat, lng, dong, stats, reports):
     nearest_text = format_distance(context["nearest_distance"])
     dominant_type = html.escape(context["dominant_type"])
     avg_intensity = context["avg_intensity"]
-    short_note = grade["text"].split(".")[0] + "."
+    note = grade["text"]
+    nearest_label = "없음" if context["nearest_distance"] is None else nearest_text
 
     return f"""
     <div class="query-risk-card">
@@ -884,23 +885,25 @@ def build_query_popup_html(lat, lng, dong, stats, reports):
             </div>
             <div class="query-risk-grid">
                 <div>
-                    <span>근처 신고</span>
+                    <span>반경 내 신고 수</span>
                     <b>{stats['report_count']}건</b>
                 </div>
                 <div>
-                    <span>가까운 신고</span>
-                    <b>{nearest_text}</b>
+                    <span>가장 가까운 신고</span>
+                    <b>{nearest_label}</b>
                 </div>
                 <div>
-                    <span>위험도 평균</span>
-                    <b>{avg_intensity:.1f}/5</b>
+                    <span>신고 평균 위험도</span>
+                    <b>{avg_intensity:.1f} / 5</b>
                 </div>
                 <div>
-                    <span>신고 모임</span>
+                    <span>신고 밀집도</span>
                     <b>{density_percent:.0f}%</b>
                 </div>
             </div>
-            <div class="query-risk-note">{dominant_type} · {short_note}</div>
+            <div class="query-risk-note">
+                주요 신고 유형: <b>{dominant_type}</b><br>{note}
+            </div>
         </div>
     </div>
     """
