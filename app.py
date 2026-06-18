@@ -1870,27 +1870,34 @@ with col_right:
     )
 
     if _active_lat is not None:
-        _show_r = REPORT_INFLUENCE_RADIUS_M * 1.8
-        for cell in visible_cells:
-            dist = haversine_distance(_active_lat, _active_lon, cell["lat"], cell["lon"])
-            if dist > _show_r:
-                continue
-            fade = max(0.0, 1.0 - dist / _show_r)
-            posterior = cell["posterior"]
-            color = get_color(posterior)
-            hw = get_heat_weight(posterior)
-            lat_r = GRID_SIZE_M / 111000 * 0.516
-            lon_r = GRID_SIZE_M / (111000 * math.cos(math.radians(cell["lat"]))) * 0.516
-            folium.Rectangle(
-                bounds=[
-                    [cell["lat"] - lat_r, cell["lon"] - lon_r],
-                    [cell["lat"] + lat_r, cell["lon"] + lon_r],
-                ],
+        # 선택 지점의 위험도 색상
+        if st.session_state.map_focus == "query" and has_query_location and query_stats:
+            _prob_c = query_stats["posterior"]
+        else:
+            _prob_c = calculate_bayesian_stats_for_point(
+                _active_lat, _active_lon, reports_for_map
+            )["posterior"]
+        _col_c = get_color(_prob_c)
+        _hw_c  = get_heat_weight(_prob_c)
+
+        # 동심원 그라디언트 — 중심에서 바깥으로 자연스럽게 페이드
+        # (큰 원부터 렌더→작은 원이 위에 쌓여 중심이 가장 진하게)
+        _rings = [
+            (REPORT_INFLUENCE_RADIUS_M * 1.60, 0.012 + _hw_c * 0.008),
+            (REPORT_INFLUENCE_RADIUS_M * 1.15, 0.025 + _hw_c * 0.015),
+            (REPORT_INFLUENCE_RADIUS_M * 0.78, 0.045 + _hw_c * 0.025),
+            (REPORT_INFLUENCE_RADIUS_M * 0.48, 0.070 + _hw_c * 0.040),
+            (REPORT_INFLUENCE_RADIUS_M * 0.22, 0.100 + _hw_c * 0.060),
+        ]
+        for _r, _op in _rings:
+            folium.Circle(
+                location=[_active_lat, _active_lon],
+                radius=_r,
                 color="none",
                 weight=0,
                 fill=True,
-                fillColor=color,
-                fillOpacity=round((0.08 + hw * 0.30) * (0.30 + 0.70 * fade), 3),
+                fillColor=_col_c,
+                fillOpacity=round(_op, 3),
                 interactive=False,
             ).add_to(m)
 
