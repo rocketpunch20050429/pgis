@@ -16,7 +16,6 @@ from streamlit_folium import st_folium
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
-import plotly.express as px
 
 # ========== 설정 ==========
 JUNGGU_CENTER = [37.5630, 126.9945]
@@ -2004,48 +2003,156 @@ if st.session_state.reports:
     if reports_df.empty or "dong" not in reports_df.columns:
         st.info("분석 가능한 신고 데이터가 없습니다.")
     else:
-        col_chart1, col_chart2 = st.columns(2)
-        
         _chart_layout = dict(
-            height=340,
+            height=300,
             showlegend=False,
             plot_bgcolor="#ffffff",
             paper_bgcolor="#ffffff",
             font=dict(family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", size=12, color="#475569"),
-            margin=dict(l=8, r=8, t=36, b=8),
+            margin=dict(l=8, r=8, t=44, b=8),
             xaxis=dict(showgrid=False, linecolor="#e2e8f0", tickcolor="#e2e8f0"),
             yaxis=dict(showgrid=True, gridcolor="#f1f5f9", linecolor="#e2e8f0", zeroline=False),
         )
 
+        col_chart1, col_chart2 = st.columns(2)
+
         with col_chart1:
-            dong_reports = reports_df.groupby("dong").size().sort_values(ascending=False)
-            fig1 = px.bar(
-                x=dong_reports.index,
-                y=dong_reports.values,
-                labels={"x": "행정동", "y": "신고 건수"},
-                title="<b>행정동별 신고 현황</b>",
-                color=dong_reports.values,
-                color_continuous_scale=[[0, "#bfdbfe"], [0.5, "#3b82f6"], [1, "#1d4ed8"]],
+            dong_stats = (
+                reports_df.groupby("dong")
+                .agg(count=("intensity", "count"), avg_intensity=("intensity", "mean"))
+                .sort_values("count", ascending=False)
+                .reset_index()
             )
-            fig1.update_layout(**_chart_layout, title_font_size=13, title_x=0)
-            fig1.update_coloraxes(showscale=False)
-            fig1.update_traces(marker_line_width=0, hovertemplate="%{x}<br>신고 %{y}건<extra></extra>")
+
+            def _bar_color(avg):
+                if avg >= 4.0: return "#ef4444"
+                if avg >= 3.0: return "#f59e0b"
+                return "#22c55e"
+
+            fig1 = go.Figure(go.Bar(
+                x=dong_stats["dong"],
+                y=dong_stats["count"],
+                marker_color=[_bar_color(a) for a in dong_stats["avg_intensity"]],
+                marker_line_width=0,
+                text=[f"평균 {a:.1f}" for a in dong_stats["avg_intensity"]],
+                textposition="outside",
+                textfont=dict(size=10, color="#64748b"),
+                hovertemplate="<b>%{x}</b><br>신고 %{y}건<br>평균 위험도 %{customdata:.1f}<extra></extra>",
+                customdata=dong_stats["avg_intensity"],
+            ))
+            fig1.update_layout(
+                **_chart_layout,
+                title=dict(
+                    text="<b>행정동별 신고 현황</b>  <span style='font-size:10px;color:#94a3b8;font-weight:400'>막대 색상 = 평균 위험도</span>",
+                    font_size=13, x=0,
+                ),
+                yaxis_title="신고 건수",
+            )
             st.plotly_chart(fig1, use_container_width=True)
 
         with col_chart2:
-            intensity_dist = reports_df["intensity"].value_counts().sort_index()
-            fig2 = px.bar(
-                x=intensity_dist.index,
+            all_levels = pd.Series(0, index=range(1, 6))
+            intensity_counts = reports_df["intensity"].value_counts()
+            intensity_dist = all_levels.add(intensity_counts, fill_value=0).astype(int)
+            total_i = intensity_dist.sum() or 1
+            level_colors = ["#22c55e", "#84cc16", "#f59e0b", "#f97316", "#ef4444"]
+            level_labels = ["1단계\n(낮음)", "2단계", "3단계\n(보통)", "4단계", "5단계\n(높음)"]
+
+            fig2 = go.Figure(go.Bar(
+                x=level_labels,
                 y=intensity_dist.values,
-                labels={"x": "위험도 단계", "y": "신고 건수"},
-                title="<b>위험도 분포</b>",
-                color=intensity_dist.index,
-                color_continuous_scale=[[0,"#86efac"],[0.25,"#fbbf24"],[0.75,"#f97316"],[1,"#ef4444"]],
+                marker_color=level_colors,
+                marker_line_width=0,
+                text=[f"{v}건 ({v/total_i:.0%})" if v > 0 else "" for v in intensity_dist.values],
+                textposition="outside",
+                textfont=dict(size=10),
+                hovertemplate="<b>위험도 %{x}</b><br>신고 %{y}건<extra></extra>",
+            ))
+            fig2.update_layout(
+                **_chart_layout,
+                title=dict(text="<b>위험도 단계별 분포</b>", font_size=13, x=0),
+                yaxis_title="신고 건수",
             )
-            fig2.update_layout(**_chart_layout, title_font_size=13, title_x=0)
-            fig2.update_coloraxes(showscale=False)
-            fig2.update_traces(marker_line_width=0, hovertemplate="위험도 %{x}<br>신고 %{y}건<extra></extra>")
             st.plotly_chart(fig2, use_container_width=True)
+
+        col_chart3, col_chart4 = st.columns(2)
+
+        with col_chart3:
+            type_counts = reports_df["type"].value_counts().reset_index()
+            type_counts.columns = ["type", "count"]
+            type_color_map = {
+                "조명 부족": "#f97316",
+                "시야 차단": "#ef4444",
+                "도로 파손": "#8b5cf6",
+                "불법 주정차": "#3b82f6",
+                "기타": "#94a3b8",
+            }
+            total_t = type_counts["count"].sum() or 1
+            fig3 = go.Figure(go.Bar(
+                x=type_counts["count"],
+                y=type_counts["type"],
+                orientation="h",
+                marker_color=[type_color_map.get(t, "#94a3b8") for t in type_counts["type"]],
+                marker_line_width=0,
+                text=[f"{c}건 ({c/total_t:.0%})" for c in type_counts["count"]],
+                textposition="outside",
+                textfont=dict(size=10),
+                hovertemplate="<b>%{y}</b><br>신고 %{x}건<extra></extra>",
+            ))
+            fig3.update_layout(
+                **_chart_layout,
+                title=dict(text="<b>신고 유형별 분포</b>", font_size=13, x=0),
+                xaxis=dict(showgrid=True, gridcolor="#f1f5f9", linecolor="#e2e8f0", title="신고 건수"),
+                yaxis=dict(showgrid=False, linecolor="#e2e8f0", autorange="reversed"),
+            )
+            st.plotly_chart(fig3, use_container_width=True)
+
+        with col_chart4:
+            high_risk = int((reports_df["intensity"] >= 4).sum())
+            mid_risk = int((reports_df["intensity"] == 3).sum())
+            low_risk = int((reports_df["intensity"] <= 2).sum())
+            dong_risk = (
+                reports_df.groupby("dong")
+                .agg(count=("intensity", "count"), avg=("intensity", "mean"))
+                .sort_values(["avg", "count"], ascending=False)
+                .reset_index()
+            )
+            rows_html = ""
+            for _, row in dong_risk.iterrows():
+                risk_color = "#ef4444" if row["avg"] >= 4 else "#f59e0b" if row["avg"] >= 3 else "#22c55e"
+                rows_html += (
+                    f'<div style="display:flex;align-items:center;justify-content:space-between;'
+                    f'padding:8px 14px;border-bottom:1px solid #f1f5f9;">'
+                    f'<span style="font-size:13px;font-weight:600;color:#0f172a;">{html.escape(str(row["dong"]))}</span>'
+                    f'<div style="display:flex;align-items:center;gap:8px;">'
+                    f'<span style="font-size:11px;color:#64748b;">{int(row["count"])}건</span>'
+                    f'<span style="background:{risk_color};color:#fff;font-size:10px;font-weight:700;'
+                    f'padding:2px 8px;border-radius:999px;">평균 {row["avg"]:.1f}</span>'
+                    f'</div></div>'
+                )
+            st.markdown(
+                f'<div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;">'
+                f'<div style="padding:12px 14px 10px;border-bottom:1px solid #e2e8f0;background:#f8fafc;">'
+                f'<div style="font-size:13px;font-weight:800;color:#0f172a;margin-bottom:8px;">주의 필요 지역</div>'
+                f'<div style="display:flex;gap:20px;">'
+                f'<div style="text-align:center;">'
+                f'<div style="font-size:22px;font-weight:900;color:#ef4444;">{high_risk}</div>'
+                f'<div style="font-size:10px;color:#94a3b8;font-weight:700;">고위험</div>'
+                f'</div>'
+                f'<div style="text-align:center;">'
+                f'<div style="font-size:22px;font-weight:900;color:#f59e0b;">{mid_risk}</div>'
+                f'<div style="font-size:10px;color:#94a3b8;font-weight:700;">주의</div>'
+                f'</div>'
+                f'<div style="text-align:center;">'
+                f'<div style="font-size:22px;font-weight:900;color:#22c55e;">{low_risk}</div>'
+                f'<div style="font-size:10px;color:#94a3b8;font-weight:700;">낮음</div>'
+                f'</div>'
+                f'</div>'
+                f'</div>'
+                f'<div style="overflow-y:auto;max-height:220px;">{rows_html}</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
 
 st.markdown("""
 <div class="pgis-section-head">
