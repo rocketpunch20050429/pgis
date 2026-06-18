@@ -2102,9 +2102,9 @@ if st.session_state.reports:
             fig3.update_layout(
                 **_chart_layout,
                 title=dict(text="<b>신고 유형별 분포</b>", font_size=13, x=0),
-                xaxis=dict(showgrid=True, gridcolor="#f1f5f9", linecolor="#e2e8f0", title="신고 건수"),
-                yaxis=dict(showgrid=False, linecolor="#e2e8f0", autorange="reversed"),
             )
+            fig3.update_xaxes(showgrid=True, gridcolor="#f1f5f9", linecolor="#e2e8f0", title_text="신고 건수")
+            fig3.update_yaxes(showgrid=False, linecolor="#e2e8f0", autorange="reversed")
             st.plotly_chart(fig3, use_container_width=True)
 
         with col_chart4:
