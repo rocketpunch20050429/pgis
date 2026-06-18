@@ -807,6 +807,91 @@ def get_risk_display(intensity):
         return "주의", "mid"
     return "낮음", "low"
 
+_REPORT_TYPE_THEMES = {
+    "조명 부족":   {"gradient": "linear-gradient(135deg,#f97316 0%,#ea580c 100%)", "icon": "💡", "soft": "#fff7ed", "accent": "#f97316"},
+    "시야 차단":   {"gradient": "linear-gradient(135deg,#ef4444 0%,#dc2626 100%)", "icon": "🚧", "soft": "#fff1f0", "accent": "#ef4444"},
+    "도로 파손":   {"gradient": "linear-gradient(135deg,#8b5cf6 0%,#7c3aed 100%)", "icon": "🕳️",  "soft": "#f5f3ff", "accent": "#8b5cf6"},
+    "불법 주정차": {"gradient": "linear-gradient(135deg,#3b82f6 0%,#2563eb 100%)", "icon": "🚗", "soft": "#eff6ff", "accent": "#3b82f6"},
+    "기타":        {"gradient": "linear-gradient(135deg,#64748b 0%,#475569 100%)", "icon": "⚠️", "soft": "#f8fafc", "accent": "#64748b"},
+}
+
+def build_report_popup_html(report):
+    report_type  = report.get("type", "기타")
+    intensity    = max(1, min(5, coerce_int(report.get("intensity"), 3)))
+    time_val     = html.escape(str(report.get("time", "-")))
+    dong         = html.escape(str(report.get("dong", "-")))
+    desc         = html.escape(str(report.get("desc", "")).strip())
+    report_id    = coerce_int(report.get("id"), 0)
+    theme        = _REPORT_TYPE_THEMES.get(report_type, _REPORT_TYPE_THEMES["기타"])
+    escaped_type = html.escape(report_type)
+
+    intensity_pct   = intensity * 20
+    risk_label = (
+        "높음" if intensity >= 4 else
+        "주의" if intensity >= 3 else
+        "낮음"
+    )
+    dots = "".join(
+        f'<span style="display:inline-block;width:8px;height:8px;border-radius:50%;'
+        f'background:{"#ef4444" if i <= intensity and intensity >= 4 else "#f59e0b" if i <= intensity and intensity >= 3 else "#22c55e" if i <= intensity else "#e2e8f0"}'
+        f';margin-right:2px;"></span>'
+        for i in range(1, 6)
+    )
+    desc_block = (
+        f'<div style="background:{theme["soft"]};border-left:3px solid {theme["accent"]};'
+        f'border-radius:0 6px 6px 0;padding:7px 9px;margin-top:8px;">'
+        f'<div style="font-size:10px;color:#374151;line-height:1.5;">{desc}</div></div>'
+    ) if desc else ""
+
+    return (
+        f'<div style="width:252px;font-family:system-ui,-apple-system,BlinkMacSystemFont,'
+        f"'Segoe UI',sans-serif;border-radius:13px;overflow:hidden;margin:-1px;\">"
+
+        # ── Header ──────────────────────────────────────────────────────────
+        f'<div style="background:{theme["gradient"]};padding:12px 13px 10px;color:#fff;">'
+        f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">'
+        f'<div style="width:30px;height:30px;border-radius:8px;background:rgba(255,255,255,.22);'
+        f'display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;">{theme["icon"]}</div>'
+        f'<div style="min-width:0;flex:1;">'
+        f'<div style="font-size:13px;font-weight:800;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{escaped_type}</div>'
+        f'<div style="font-size:10px;opacity:.82;margin-top:2px;">{dong} · #{report_id}</div>'
+        f'</div>'
+        f'<div style="flex-shrink:0;padding:3px 8px;border-radius:999px;background:rgba(255,255,255,.2);'
+        f'border:1px solid rgba(255,255,255,.32);font-size:10px;font-weight:800;">{risk_label}</div>'
+        f'</div>'
+        # progress bar
+        f'<div style="background:rgba(255,255,255,.22);border-radius:999px;height:4px;overflow:hidden;">'
+        f'<div style="width:{intensity_pct}%;height:100%;background:#fff;border-radius:999px;"></div>'
+        f'</div>'
+        f'</div>'
+
+        # ── Body ─────────────────────────────────────────────────────────────
+        f'<div style="padding:10px 12px 12px;background:#fff;">'
+        # dots row
+        f'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">'
+        f'<div>'
+        f'<div style="font-size:9px;color:#94a3b8;font-weight:700;letter-spacing:.3px;text-transform:uppercase;">위험도</div>'
+        f'<div style="margin-top:4px;">{dots}</div>'
+        f'</div>'
+        f'<div style="font-size:24px;font-weight:900;color:#0f172a;line-height:1;">{intensity}'
+        f'<span style="font-size:11px;font-weight:600;color:#94a3b8;">/5</span></div>'
+        f'</div>'
+        # info grid
+        f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;">'
+        f'<div style="background:#f8fafc;border-radius:7px;padding:6px 8px;border:1px solid #e5e7eb;">'
+        f'<div style="font-size:9px;color:#94a3b8;font-weight:700;">⏱ 신고 시간</div>'
+        f'<div style="font-size:11px;font-weight:700;color:#0f172a;margin-top:2px;">{time_val}</div>'
+        f'</div>'
+        f'<div style="background:#f8fafc;border-radius:7px;padding:6px 8px;border:1px solid #e5e7eb;">'
+        f'<div style="font-size:9px;color:#94a3b8;font-weight:700;">📍 행정동</div>'
+        f'<div style="font-size:11px;font-weight:700;color:#0f172a;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{dong}</div>'
+        f'</div>'
+        f'</div>'
+        f'{desc_block}'
+        f'</div>'
+        f'</div>'
+    )
+
 class RightClickQueryHandler(MacroElement):
     _template = Template(f"""
     {{% macro script(this, kwargs) %}}
@@ -1535,10 +1620,10 @@ with col_right:
         if selected_dong != "전체" and report.get("dong") != selected_dong:
             continue
         
-        popup = f"<b>{report['type']}</b><br/>위험도: {report['intensity']}/5<br/>시간: {report['time']}<br/>{report.get('desc', '')}"
+        popup = build_report_popup_html(report)
         folium.Marker(
             location=[report["lat"], report["lng"]],
-            popup=folium.Popup(popup, max_width=250),
+            popup=folium.Popup(popup, max_width=270),
             icon=folium.Icon(color=type_colors.get(report["type"], "gray"), icon_color="white", icon="info-sign"),
             tooltip=report["type"],
         ).add_to(m)
