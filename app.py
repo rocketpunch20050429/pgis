@@ -9,6 +9,7 @@ import html
 import math
 import streamlit as st
 import streamlit.components.v1 as components
+from branca.element import MacroElement, Template
 import folium
 from folium.plugins import HeatMap
 from streamlit_folium import st_folium
@@ -32,6 +33,7 @@ REPORT_DENSITY_SATURATION = 2.2
 BACKGROUND_LIKELIHOOD = 0.07
 FALSE_ALARM_RATE = 0.10
 MAX_PRIOR_BOOST = 0.22
+RIGHT_CLICK_REGISTER_TOKEN = "__RIGHT_CLICK_REGISTER__"
 REPORTS_FILE = os.path.join(os.path.dirname(__file__), "reports.json")
 
 # ========== 중구 행정동 데이터 ==========
@@ -455,49 +457,55 @@ def get_report_distance_weight(distance_m):
 def get_density_factor(weighted_count):
     return 1 - math.exp(-weighted_count / REPORT_DENSITY_SATURATION)
 
+def calculate_bayesian_stats_for_point(lat, lng, reports, prior=0.1):
+    nearby_count = 0
+    weighted_count = 0
+    weighted_risk = 0
+    
+    for report in reports:
+        distance = haversine_distance(lat, lng, report["lat"], report["lng"])
+        distance_weight = get_report_distance_weight(distance)
+        if distance_weight <= 0:
+            continue
+
+        nearby_count += 1
+        weighted_count += distance_weight
+        weighted_risk += distance_weight * (report["intensity"] / 5)
+
+    if weighted_count > 0:
+        local_risk = weighted_risk / weighted_count
+        density_factor = get_density_factor(weighted_count)
+        likelihood = BACKGROUND_LIKELIHOOD + (local_risk - BACKGROUND_LIKELIHOOD) * density_factor
+        adaptive_prior = min(0.5, prior + density_factor * MAX_PRIOR_BOOST)
+    else:
+        local_risk = 0
+        density_factor = 0
+        likelihood = BACKGROUND_LIKELIHOOD
+        adaptive_prior = prior
+    
+    evidence = adaptive_prior * likelihood + (1 - adaptive_prior) * FALSE_ALARM_RATE
+    posterior = (adaptive_prior * likelihood) / evidence if evidence > 0 else adaptive_prior
+    
+    return {
+        "likelihood": likelihood,
+        "posterior": posterior,
+        "report_count": nearby_count,
+        "weighted_count": weighted_count,
+        "local_risk": local_risk,
+        "density_factor": density_factor,
+    }
+
 def bayesian_update(grid, reports):
     """베이지안 정리 계산"""
     reports = normalize_reports(reports)
     updated = []
     
     for cell in grid:
-        prior = cell["prior"]
-        nearby_count = 0
-        weighted_count = 0
-        weighted_risk = 0
-        
-        for report in reports:
-            distance = haversine_distance(cell["lat"], cell["lon"], report["lat"], report["lng"])
-            distance_weight = get_report_distance_weight(distance)
-            if distance_weight <= 0:
-                continue
-
-            nearby_count += 1
-            weighted_count += distance_weight
-            weighted_risk += distance_weight * (report["intensity"] / 5)
-
-        if weighted_count > 0:
-            local_risk = weighted_risk / weighted_count
-            density_factor = get_density_factor(weighted_count)
-            likelihood = BACKGROUND_LIKELIHOOD + (local_risk - BACKGROUND_LIKELIHOOD) * density_factor
-            adaptive_prior = min(0.5, prior + density_factor * MAX_PRIOR_BOOST)
-        else:
-            local_risk = 0
-            density_factor = 0
-            likelihood = BACKGROUND_LIKELIHOOD
-            adaptive_prior = prior
-        
-        evidence = adaptive_prior * likelihood + (1 - adaptive_prior) * FALSE_ALARM_RATE
-        posterior = (adaptive_prior * likelihood) / evidence if evidence > 0 else adaptive_prior
+        stats = calculate_bayesian_stats_for_point(cell["lat"], cell["lon"], reports, cell["prior"])
         
         updated.append({
             **cell,
-            "likelihood": likelihood,
-            "posterior": posterior,
-            "report_count": nearby_count,
-            "weighted_count": weighted_count,
-            "local_risk": local_risk,
-            "density_factor": density_factor,
+            **stats,
         })
     
     return updated
@@ -526,14 +534,23 @@ def get_zone_radius_m(value, report_count, weighted_count=0):
 def get_zone_opacity(value, density_factor=0):
     return min(0.52, 0.12 + get_heat_weight(value) * 0.24 + density_factor * 0.14)
 
-def get_map_click_coords(map_data):
+def get_map_interaction(map_data):
     if not map_data:
         return None
 
-    for key in ("last_clicked", "last_object_clicked"):
-        clicked = map_data.get(key)
-        if isinstance(clicked, dict) and clicked.get("lat") is not None and clicked.get("lng") is not None:
-            return float(clicked["lat"]), float(clicked["lng"])
+    object_tooltip = map_data.get("last_object_clicked_tooltip")
+    object_clicked = map_data.get("last_object_clicked")
+    if (
+        object_tooltip == RIGHT_CLICK_REGISTER_TOKEN
+        and isinstance(object_clicked, dict)
+        and object_clicked.get("lat") is not None
+        and object_clicked.get("lng") is not None
+    ):
+        return "register", float(object_clicked["lat"]), float(object_clicked["lng"])
+
+    clicked = map_data.get("last_clicked")
+    if isinstance(clicked, dict) and clicked.get("lat") is not None and clicked.get("lng") is not None:
+        return "query", float(clicked["lat"]), float(clicked["lng"])
 
     return None
 
@@ -543,6 +560,62 @@ def get_risk_display(intensity):
     if intensity >= 3:
         return "주의", "mid"
     return "낮음", "low"
+
+class RightClickRegisterHandler(MacroElement):
+    _template = Template(f"""
+    {{% macro script(this, kwargs) %}}
+        const map = {{{{ this._parent.get_name() }}}};
+        let pendingRightClick = null;
+        const doubleRightClickMs = 900;
+        const doubleRightClickMaxDistancePx = 26;
+
+        map.on("contextmenu", function(e) {{
+            if (e.originalEvent) {{
+                e.originalEvent.preventDefault();
+                e.originalEvent.stopPropagation();
+            }}
+
+            const coords = {{ lat: e.latlng.lat, lng: e.latlng.lng }};
+            const clickPoint = map.latLngToContainerPoint(e.latlng);
+            const now = Date.now();
+            const isSecondClick = pendingRightClick
+                && now - pendingRightClick.time <= doubleRightClickMs
+                && clickPoint.distanceTo(pendingRightClick.point) <= doubleRightClickMaxDistancePx;
+
+            pendingRightClick = {{
+                time: now,
+                point: clickPoint,
+                coords: coords
+            }};
+
+            if (!isSecondClick) {{
+                return;
+            }}
+
+            pendingRightClick = null;
+            const globalData = window.__GLOBAL_DATA__;
+            if (!globalData || !window.Streamlit) {{
+                return;
+            }}
+
+            globalData.last_object_clicked = coords;
+            globalData.last_object_clicked_tooltip = "{RIGHT_CLICK_REGISTER_TOKEN}";
+            globalData.last_object_clicked_popup = null;
+
+            const lastClicked = globalData.lat_lng_clicked
+                ? {{ lat: globalData.lat_lng_clicked.lat, lng: globalData.lat_lng_clicked.lng }}
+                : null;
+            const data = {{
+                last_clicked: lastClicked,
+                last_object_clicked: coords,
+                last_object_clicked_tooltip: "{RIGHT_CLICK_REGISTER_TOKEN}",
+                last_object_clicked_popup: null
+            }};
+            globalData.previous_data = data;
+            window.Streamlit.setComponentValue(data);
+        }});
+    {{% endmacro %}}
+    """)
 
 def render_report_status_table(df_reports, selected_dong):
     df = df_reports.sort_values("id", ascending=False).copy()
@@ -660,6 +733,10 @@ if "clicked_lat" not in st.session_state:
     st.session_state.clicked_lat = None
 if "clicked_lng" not in st.session_state:
     st.session_state.clicked_lng = None
+if "query_lat" not in st.session_state:
+    st.session_state.query_lat = None
+if "query_lng" not in st.session_state:
+    st.session_state.query_lng = None
 if "location_input_version" not in st.session_state:
     st.session_state.location_input_version = 0
 if "map_click_msg" not in st.session_state:
@@ -732,7 +809,7 @@ with col_left:
             st.success(f"✅ 지도에서 선택된 위치 · {selected_report_dong}")
             st.caption(f"위도 {lat:.6f} / 경도 {lng:.6f}")
         else:
-            st.info("💡 오른쪽 지도에서 클릭하여 위치 선택!")
+            st.info("💡 오른쪽 지도에서 같은 지점 근처를 빠르게 두 번 우클릭하여 신고 위치 선택!")
         
         if st.form_submit_button("📌 신고 등록", use_container_width=True):
             dong = get_dong_by_coords(lat, lng)
@@ -816,11 +893,24 @@ with col_left:
 # ========== 우측: 지도 ==========
 with col_right:
     st.markdown("### 🎯 베이지안 위험도 지도")
-    st.markdown("💡 **지도를 클릭하여 신고 위치를 선택하세요!**", help="클릭한 좌표가 왼쪽 폼에 자동으로 입력됩니다")
+    st.markdown("💡 **좌클릭: 예상 사고확률 조회 · 우클릭 2회: 신고 위치 등록**", help="같은 지점 근처를 빠르게 두 번 우클릭하면 좌표가 왼쪽 신고 폼에 자동으로 입력됩니다")
     
     # 베이지안 계산
     reports_for_map = normalize_reports(st.session_state.reports)
     bayesian_grid = bayesian_update(st.session_state.grid, reports_for_map)
+    query_lat = st.session_state.query_lat
+    query_lng = st.session_state.query_lng
+    has_query_location = query_lat is not None and query_lng is not None
+    query_stats = (
+        calculate_bayesian_stats_for_point(query_lat, query_lng, reports_for_map)
+        if has_query_location else None
+    )
+    if query_stats:
+        query_dong = get_dong_by_coords(query_lat, query_lng)
+        st.info(
+            f"좌클릭 조회 · {query_dong} · 예상 사고확률 {query_stats['posterior']:.2%} "
+            f"· 영향 신고 {query_stats['report_count']}건"
+        )
     
     selected_map_lat = st.session_state.clicked_lat
     selected_map_lng = st.session_state.clicked_lng
@@ -835,6 +925,7 @@ with col_right:
         control_scale=True,
         prefer_canvas=True,
     )
+    RightClickRegisterHandler().add_to(m)
     
     # 위험도 레이어
     visible_cells = [
@@ -927,6 +1018,31 @@ with col_right:
             label=dong_name,
         ).add_to(m)
     
+    if has_query_location and query_stats:
+        query_dong = get_dong_by_coords(query_lat, query_lng)
+        probability = query_stats["posterior"]
+        probability_color = get_color(probability)
+        query_popup = f"""
+        <div style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; min-width: 180px;">
+            <div style="font-weight: 700; color: #0f172a; margin-bottom: 4px;">예상 사고확률</div>
+            <div style="font-size: 18px; font-weight: 800; color: {probability_color};">{probability:.2%}</div>
+            <div style="color: #475569; font-size: 12px;">{query_dong}</div>
+            <div style="color: #475569; font-size: 12px;">영향 신고 {query_stats['report_count']}건</div>
+        </div>
+        """
+        folium.CircleMarker(
+            location=[query_lat, query_lng],
+            radius=12,
+            color=probability_color,
+            weight=3,
+            opacity=0.95,
+            fill=True,
+            fillColor=probability_color,
+            fillOpacity=0.24,
+            popup=folium.Popup(query_popup, max_width=250),
+            tooltip=f"예상 사고확률 {probability:.1%}",
+        ).add_to(m)
+    
     if has_selected_location:
         selected_location_dong = get_dong_by_coords(selected_map_lat, selected_map_lng)
         selected_popup = f"""
@@ -1002,25 +1118,42 @@ with col_right:
         m,
         width=1040,
         height=760,
-        returned_objects=["last_clicked", "last_object_clicked"],
+        returned_objects=[
+            "last_clicked",
+            "last_object_clicked",
+            "last_object_clicked_tooltip",
+            "last_object_clicked_popup",
+        ],
     )
     
     # 클릭 이벤트 처리
-    clicked_coords = get_map_click_coords(map_data)
-    if clicked_coords:
-        clicked_lat, clicked_lng = clicked_coords
-        is_new_location = (
-            st.session_state.clicked_lat is None
-            or st.session_state.clicked_lng is None
-            or abs(st.session_state.clicked_lat - clicked_lat) > 0.000001
-            or abs(st.session_state.clicked_lng - clicked_lng) > 0.000001
-        )
-        if is_new_location:
-            st.session_state.clicked_lat = clicked_lat
-            st.session_state.clicked_lng = clicked_lng
-            st.session_state.location_input_version += 1
-            st.session_state.map_click_msg = True
-            st.rerun()
+    map_interaction = get_map_interaction(map_data)
+    if map_interaction:
+        interaction_type, clicked_lat, clicked_lng = map_interaction
+        if interaction_type == "register":
+            is_new_location = (
+                st.session_state.clicked_lat is None
+                or st.session_state.clicked_lng is None
+                or abs(st.session_state.clicked_lat - clicked_lat) > 0.000001
+                or abs(st.session_state.clicked_lng - clicked_lng) > 0.000001
+            )
+            if is_new_location:
+                st.session_state.clicked_lat = clicked_lat
+                st.session_state.clicked_lng = clicked_lng
+                st.session_state.location_input_version += 1
+                st.session_state.map_click_msg = True
+                st.rerun()
+        elif interaction_type == "query":
+            is_new_query = (
+                st.session_state.query_lat is None
+                or st.session_state.query_lng is None
+                or abs(st.session_state.query_lat - clicked_lat) > 0.000001
+                or abs(st.session_state.query_lng - clicked_lng) > 0.000001
+            )
+            if is_new_query:
+                st.session_state.query_lat = clicked_lat
+                st.session_state.query_lng = clicked_lng
+                st.rerun()
 
 # ========== 하단: 분석 ==========
 st.divider()
