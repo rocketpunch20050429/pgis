@@ -769,39 +769,39 @@ def bayesian_update(grid, reports):
 def get_color(value):
     """위험도 색상"""
     if value < 0.16:
-        return "#6cc3b0"
+        return "#10b981"
     elif value < 0.30:
-        return "#d6bd3f"
+        return "#f59e0b"
     elif value < 0.46:
-        return "#e9873f"
+        return "#f97316"
     else:
-        return "#d85745"
+        return "#ef4444"
 
 def get_probability_grade(probability):
     if probability >= 0.46:
         return {
             "label": "고위험",
-            "color": "#d85745",
+            "color": "#ef4444",
             "soft": "#fff1f0",
             "text": "이 지역은 위험도가 높습니다. 가능하면 주의해서 이동하세요.",
         }
     if probability >= 0.30:
         return {
             "label": "주의",
-            "color": "#e9873f",
+            "color": "#f97316",
             "soft": "#fff7ed",
             "text": "주변에 위험 신고가 있습니다. 이동 시 주변 상황을 확인하세요.",
         }
     if probability >= 0.16:
         return {
             "label": "관찰",
-            "color": "#d6bd3f",
+            "color": "#f59e0b",
             "soft": "#fefce8",
             "text": "현재 위험도는 중간 수준입니다. 상황 변화를 지켜보세요.",
         }
     return {
-        "label": "낮음",
-        "color": "#6cc3b0",
+        "label": "안전",
+        "color": "#10b981",
         "soft": "#ecfdf5",
         "text": "현재 이 지역의 위험도는 낮습니다. 안전한 상태입니다.",
     }
@@ -1764,6 +1764,84 @@ with col_right:
             line-height: 1.35;
             color: #334155;
         }
+
+        /* ── 핀 애니메이션 ── */
+        @keyframes pgis-ring {
+            0%   { transform: scale(0.4); opacity: 0.7; }
+            100% { transform: scale(2.8); opacity: 0;   }
+        }
+        @keyframes pgis-pop {
+            0%   { transform: scale(0.7); }
+            60%  { transform: scale(1.15); }
+            100% { transform: scale(1);   }
+        }
+
+        /* ── 우클릭 쿼리 핀 ── */
+        .pgis-qpin { position: relative; width: 0; height: 0; }
+        .pgis-qpin__dot {
+            position: absolute;
+            width: 18px; height: 18px;
+            border-radius: 50%;
+            border: 2.5px solid #fff;
+            box-shadow: 0 2px 14px rgba(0,0,0,.38), 0 0 0 1px rgba(0,0,0,.06);
+            top: -9px; left: -9px;
+            z-index: 20;
+            animation: pgis-pop .35s cubic-bezier(.34,1.56,.64,1) both;
+        }
+        .pgis-qpin__ring {
+            position: absolute;
+            width: 18px; height: 18px;
+            border-radius: 50%;
+            top: -9px; left: -9px;
+            z-index: 19;
+            opacity: 0;
+            animation: pgis-ring 2.4s ease-out infinite;
+        }
+
+        /* ── 신고 위치 핀 ── */
+        .pgis-selpin { position: relative; width: 0; height: 0; }
+        .pgis-selpin__dot {
+            position: absolute;
+            width: 18px; height: 18px;
+            border-radius: 50%;
+            background: #2563eb;
+            border: 3px solid #fff;
+            box-shadow: 0 3px 16px rgba(37,99,235,.55);
+            top: -9px; left: -9px;
+            z-index: 20;
+            animation: pgis-pop .35s cubic-bezier(.34,1.56,.64,1) both;
+        }
+        .pgis-selpin__ring {
+            position: absolute;
+            width: 18px; height: 18px;
+            border-radius: 50%;
+            background: #3b82f6;
+            top: -9px; left: -9px;
+            z-index: 19;
+            opacity: 0;
+            animation: pgis-ring 2.2s ease-out infinite;
+        }
+
+        /* ── 신고 마커 핀 ── */
+        .pgis-rpin {
+            position: relative;
+            filter: drop-shadow(0 4px 7px rgba(0,0,0,.28));
+        }
+        .pgis-rpin__body {
+            width: 30px; height: 30px;
+            border-radius: 50% 50% 50% 0;
+            transform: rotate(-45deg);
+            border: 2.5px solid #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .pgis-rpin__emoji {
+            transform: rotate(45deg);
+            font-size: 13px;
+            line-height: 1;
+            margin-top: 1px;
+        }
     </style>
     """))
     
@@ -1785,32 +1863,32 @@ with col_right:
     if heat_points:
         HeatMap(
             heat_points,
-            radius=38,
-            blur=36,
-            min_opacity=0.03,
+            radius=42,
+            blur=40,
+            min_opacity=0.02,
             gradient={
-                0.15: "#6cc3b0",
-                0.45: "#d6bd3f",
-                0.70: "#e9873f",
-                1.00: "#d85745",
+                0.15: "#10b981",
+                0.45: "#f59e0b",
+                0.70: "#f97316",
+                1.00: "#ef4444",
             },
         ).add_to(m)
         m.get_root().header.add_child(folium.Element("""
         <style>
             .leaflet-heatmap-layer {
                 pointer-events: none !important;
-                opacity: 0.35 !important;
+                opacity: 0.28 !important;
             }
         </style>
         """))
-    
-    # 전체 격자 색상 타일 (틈새 없이 전체 커버)
+
+    # 격자 색상 타일 — 틈새 없이 전체 지역 커버
     for cell in visible_cells:
         posterior = cell["posterior"]
         color = get_color(posterior)
         hw = get_heat_weight(posterior)
-        lat_r = GRID_SIZE_M / 111000 * 0.515
-        lon_r = GRID_SIZE_M / (111000 * math.cos(math.radians(cell["lat"]))) * 0.515
+        lat_r = GRID_SIZE_M / 111000 * 0.516
+        lon_r = GRID_SIZE_M / (111000 * math.cos(math.radians(cell["lat"]))) * 0.516
         folium.Rectangle(
             bounds=[
                 [cell["lat"] - lat_r, cell["lon"] - lon_r],
@@ -1820,28 +1898,39 @@ with col_right:
             weight=0,
             fill=True,
             fillColor=color,
-            fillOpacity=0.06 + hw * 0.19,
+            fillOpacity=round(0.055 + hw * 0.175, 3),
             interactive=False,
         ).add_to(m)
 
-    # 신고 마커
-    type_colors = {
-        "조명 부족": "orange",
-        "시야 차단": "red",
-        "도로 파손": "purple",
-        "불법 주정차": "blue",
-        "기타": "gray",
+    # 신고 마커 — 커스텀 핀
+    _type_cfg = {
+        "조명 부족":   {"emoji": "💡", "bg": "#f97316"},
+        "시야 차단":   {"emoji": "🚧", "bg": "#ef4444"},
+        "도로 파손":   {"emoji": "🕳️",  "bg": "#8b5cf6"},
+        "불법 주정차": {"emoji": "🚗", "bg": "#3b82f6"},
+        "기타":        {"emoji": "⚠️", "bg": "#64748b"},
     }
-    
+
     for report in reports_for_map:
         if selected_dong != "전체" and report.get("dong") != selected_dong:
             continue
-        
+
         tip_html = build_report_popup_html(report)
+        cfg = _type_cfg.get(report.get("type", "기타"), _type_cfg["기타"])
         folium.Marker(
             location=[report["lat"], report["lng"]],
             tooltip=folium.Tooltip(tip_html, sticky=True),
-            icon=folium.Icon(color=type_colors.get(report["type"], "gray"), icon_color="white", icon="info-sign"),
+            icon=folium.DivIcon(
+                icon_size=(30, 36),
+                icon_anchor=(7, 30),
+                html=f"""
+                <div class="pgis-rpin">
+                    <div class="pgis-rpin__body" style="background:{cfg['bg']};">
+                        <span class="pgis-rpin__emoji">{cfg['emoji']}</span>
+                    </div>
+                </div>
+                """,
+            ),
         ).add_to(m)
     
     if st.session_state.map_focus == "query" and has_query_location and query_stats:
@@ -1849,15 +1938,18 @@ with col_right:
         probability = query_stats["posterior"]
         probability_color = get_color(probability)
         query_popup = build_query_popup_html(query_lat, query_lng, query_dong, query_stats, reports_for_map)
-        folium.CircleMarker(
+        folium.Marker(
             location=[query_lat, query_lng],
-            radius=10,
-            color="#ffffff",
-            weight=2.5,
-            opacity=1,
-            fill=True,
-            fillColor=probability_color,
-            fillOpacity=0.92,
+            icon=folium.DivIcon(
+                icon_size=(0, 0),
+                icon_anchor=(0, 0),
+                html=f"""
+                <div class="pgis-qpin">
+                    <div class="pgis-qpin__dot" style="background:{probability_color};"></div>
+                    <div class="pgis-qpin__ring" style="background:{probability_color};"></div>
+                </div>
+                """,
+            ),
         ).add_to(m)
         folium.Marker(
             location=[query_lat, query_lng],
@@ -1868,85 +1960,78 @@ with col_right:
                 html=f"""<div class="query-risk-anchor">{query_popup}</div>""",
             ),
         ).add_to(m)
-    
+
     if has_selected_location:
         selected_location_dong = get_dong_by_coords(selected_map_lat, selected_map_lng)
         _sel_stats = calculate_bayesian_stats_for_point(selected_map_lat, selected_map_lng, reports_for_map)
-        _sel_color = get_color(_sel_stats["posterior"])
-        folium.CircleMarker(
-            location=[selected_map_lat, selected_map_lng],
-            radius=18,
-            color=_sel_color,
-            weight=3,
-            opacity=0.75,
-            fill=True,
-            fillColor=_sel_color,
-            fillOpacity=0.12,
-            interactive=False,
-        ).add_to(m)
+        sel_grade = get_probability_grade(_sel_stats["posterior"])
         selected_popup = f"""
-        <div style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; min-width: 170px;">
-            <div style="font-weight: 700; color: #0f172a; margin-bottom: 4px;">선택한 신고 위치</div>
-            <div style="color: #475569; font-size: 12px;">{selected_location_dong}</div>
-            <div style="color: #475569; font-size: 12px;">위도 {selected_map_lat:.6f}</div>
-            <div style="color: #475569; font-size: 12px;">경도 {selected_map_lng:.6f}</div>
+        <div style="font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:2px 0;">
+            <div style="font-weight:800;color:#0f172a;font-size:13px;margin-bottom:6px;">신고 등록 위치</div>
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:5px;">
+                <span style="background:{sel_grade['color']};color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;">{sel_grade['label']}</span>
+                <span style="color:#64748b;font-size:11px;">{selected_location_dong}</span>
+            </div>
+            <div style="font-size:11px;color:#94a3b8;">위도 {selected_map_lat:.6f} / 경도 {selected_map_lng:.6f}</div>
         </div>
         """
-        folium.CircleMarker(
-            location=[selected_map_lat, selected_map_lng],
-            radius=16,
-            color="#2563eb",
-            weight=3,
-            opacity=0.95,
-            fill=True,
-            fillColor="#60a5fa",
-            fillOpacity=0.22,
-            bubbling_mouse_events=True,
-            popup=folium.Popup(selected_popup, max_width=240),
-            tooltip="선택한 신고 위치",
-        ).add_to(m)
         folium.Marker(
             location=[selected_map_lat, selected_map_lng],
+            popup=folium.Popup(selected_popup, max_width=240),
+            tooltip="신고 위치 — 클릭하면 위험도 확인",
             icon=folium.DivIcon(
+                icon_size=(0, 0),
+                icon_anchor=(0, 0),
                 html="""
-                <div style="
-                    width: 18px;
-                    height: 18px;
-                    margin-left: -9px;
-                    margin-top: -9px;
-                    border-radius: 999px;
-                    background: #2563eb;
-                    border: 3px solid #ffffff;
-                    box-shadow: 0 6px 18px rgba(37, 99, 235, 0.35);
-                "></div>
-                """
+                <div class="pgis-selpin">
+                    <div class="pgis-selpin__dot"></div>
+                    <div class="pgis-selpin__ring"></div>
+                </div>
+                """,
             ),
         ).add_to(m)
-    
+
     legend_html = """
     <div style="
         position: fixed;
-        left: 24px;
-        bottom: 28px;
+        right: 18px;
+        bottom: 36px;
         z-index: 9999;
-        width: 152px;
-        padding: 10px 12px;
-        background: rgba(255, 255, 255, 0.88);
-        border: 1px solid rgba(148, 163, 184, 0.35);
-        border-radius: 8px;
-        box-shadow: 0 12px 28px rgba(15, 23, 42, 0.14);
-        color: #0f172a;
+        min-width: 168px;
+        padding: 13px 16px 14px;
+        background: rgba(10,15,28,0.88);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid rgba(255,255,255,.10);
+        border-radius: 14px;
+        box-shadow: 0 10px 36px rgba(0,0,0,.38);
         font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     ">
-        <div style="font-size: 12px; font-weight: 700; margin-bottom: 7px;">위험도</div>
-        <div style="
-            height: 8px;
-            border-radius: 8px;
-            background: linear-gradient(90deg, #6cc3b0 0%, #d6bd3f 42%, #e9873f 70%, #d85745 100%);
-        "></div>
-        <div style="display: flex; justify-content: space-between; margin-top: 5px; font-size: 10px; color: #64748b;">
-            <span>낮음</span>
-            <span>높음</span>
+        <div style="font-size:10px;font-weight:700;letter-spacing:.7px;color:#475569;text-transform:uppercase;margin-bottom:8px;">위험도</div>
+        <div style="height:6px;border-radius:999px;background:linear-gradient(90deg,#10b981 0%,#f59e0b 42%,#f97316 70%,#ef4444 100%);margin-bottom:5px;"></div>
+        <div style="display:flex;justify-content:space-between;font-size:9.5px;color:#64748b;margin-bottom:14px;">
+            <span>안전</span><span>관찰</span><span>주의</span><span>위험</span>
+        </div>
+        <div style="border-top:1px solid rgba(255,255,255,.08);padding-top:12px;">
+            <div style="font-size:10px;font-weight:700;letter-spacing:.7px;color:#475569;text-transform:uppercase;margin-bottom:8px;">신고 유형</div>
+            <div style="display:flex;flex-direction:column;gap:5px;">
+                <div style="display:flex;align-items:center;gap:7px;">
+                    <span style="width:9px;height:9px;border-radius:50%;background:#f97316;flex-shrink:0;"></span>
+                    <span style="font-size:11px;color:#cbd5e1;">💡 조명 부족</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:7px;">
+                    <span style="width:9px;height:9px;border-radius:50%;background:#ef4444;flex-shrink:0;"></span>
+                    <span style="font-size:11px;color:#cbd5e1;">🚧 시야 차단</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:7px;">
+                    <span style="width:9px;height:9px;border-radius:50%;background:#8b5cf6;flex-shrink:0;"></span>
+                    <span style="font-size:11px;color:#cbd5e1;">🕳️ 도로 파손</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:7px;">
+                    <span style="width:9px;height:9px;border-radius:50%;background:#3b82f6;flex-shrink:0;"></span>
+                    <span style="font-size:11px;color:#cbd5e1;">🚗 불법 주정차</span>
+                </div>
+            </div>
         </div>
     </div>
     """
