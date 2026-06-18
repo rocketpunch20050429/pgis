@@ -1804,6 +1804,26 @@ with col_right:
         </style>
         """))
     
+    # 전체 격자 색상 타일 (틈새 없이 전체 커버)
+    for cell in visible_cells:
+        posterior = cell["posterior"]
+        color = get_color(posterior)
+        hw = get_heat_weight(posterior)
+        lat_r = GRID_SIZE_M / 111000 * 0.515
+        lon_r = GRID_SIZE_M / (111000 * math.cos(math.radians(cell["lat"]))) * 0.515
+        folium.Rectangle(
+            bounds=[
+                [cell["lat"] - lat_r, cell["lon"] - lon_r],
+                [cell["lat"] + lat_r, cell["lon"] + lon_r],
+            ],
+            color="none",
+            weight=0,
+            fill=True,
+            fillColor=color,
+            fillOpacity=0.06 + hw * 0.19,
+            interactive=False,
+        ).add_to(m)
+
     # 신고 마커
     type_colors = {
         "조명 부족": "orange",
@@ -1829,24 +1849,15 @@ with col_right:
         probability = query_stats["posterior"]
         probability_color = get_color(probability)
         query_popup = build_query_popup_html(query_lat, query_lng, query_dong, query_stats, reports_for_map)
-        _nearest_q = min(
-            bayesian_grid,
-            key=lambda c: haversine_distance(query_lat, query_lng, c["lat"], c["lon"])
-        )
-        _qlat = GRID_SIZE_M / 111000
-        _qlon = GRID_SIZE_M / (111000 * math.cos(math.radians(_nearest_q["lat"])))
-        folium.Rectangle(
-            bounds=[
-                [_nearest_q["lat"] - _qlat / 2, _nearest_q["lon"] - _qlon / 2],
-                [_nearest_q["lat"] + _qlat / 2, _nearest_q["lon"] + _qlon / 2],
-            ],
-            color=probability_color,
-            weight=2,
-            opacity=0.9,
+        folium.CircleMarker(
+            location=[query_lat, query_lng],
+            radius=10,
+            color="#ffffff",
+            weight=2.5,
+            opacity=1,
             fill=True,
             fillColor=probability_color,
-            fillOpacity=0.35,
-            interactive=False,
+            fillOpacity=0.92,
         ).add_to(m)
         folium.Marker(
             location=[query_lat, query_lng],
@@ -1862,23 +1873,15 @@ with col_right:
         selected_location_dong = get_dong_by_coords(selected_map_lat, selected_map_lng)
         _sel_stats = calculate_bayesian_stats_for_point(selected_map_lat, selected_map_lng, reports_for_map)
         _sel_color = get_color(_sel_stats["posterior"])
-        _nearest_s = min(
-            bayesian_grid,
-            key=lambda c: haversine_distance(selected_map_lat, selected_map_lng, c["lat"], c["lon"])
-        )
-        _slat = GRID_SIZE_M / 111000
-        _slon = GRID_SIZE_M / (111000 * math.cos(math.radians(_nearest_s["lat"])))
-        folium.Rectangle(
-            bounds=[
-                [_nearest_s["lat"] - _slat / 2, _nearest_s["lon"] - _slon / 2],
-                [_nearest_s["lat"] + _slat / 2, _nearest_s["lon"] + _slon / 2],
-            ],
+        folium.CircleMarker(
+            location=[selected_map_lat, selected_map_lng],
+            radius=18,
             color=_sel_color,
-            weight=2,
-            opacity=0.85,
+            weight=3,
+            opacity=0.75,
             fill=True,
             fillColor=_sel_color,
-            fillOpacity=0.25,
+            fillOpacity=0.12,
             interactive=False,
         ).add_to(m)
         selected_popup = f"""
