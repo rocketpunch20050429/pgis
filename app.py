@@ -35,6 +35,7 @@ FALSE_ALARM_RATE = 0.10
 MAX_PRIOR_BOOST = 0.22
 RIGHT_CLICK_QUERY_TOKEN = "__RIGHT_CLICK_QUERY__"
 REPORTS_FILE = os.path.join(os.path.dirname(__file__), "reports.json")
+REPORTS_TABLE = "reports"
 
 # ========== 중구 행정동 데이터 ==========
 JUNGGU_DONGS = {
@@ -949,16 +950,163 @@ def render_report_status_table(df_reports, selected_dong):
     </div>
     """
 
+def normalize_database_url(database_url):
+    if not database_url:
+        return None
+
+    database_url = database_url.strip()
+    if database_url.startswith("postgres://"):
+        database_url = "postgresql://" + database_url[len("postgres://"):]
+    return database_url
+
+def get_database_url():
+    database_url = os.environ.get("DATABASE_URL")
+    if database_url:
+        return normalize_database_url(database_url)
+
+    try:
+        database_url = st.secrets.get("DATABASE_URL")
+    except Exception:
+        database_url = None
+
+    return normalize_database_url(database_url)
+
+def is_database_enabled():
+    return bool(get_database_url())
+
+def get_db_connection():
+    try:
+        import psycopg2
+    except ImportError as exc:
+        raise RuntimeError("PostgreSQL 저장을 사용하려면 psycopg2-binary가 필요합니다.") from exc
+
+    return psycopg2.connect(get_database_url())
+
+def row_to_report(row):
+    created_at = row.get("created_at")
+    if isinstance(created_at, datetime):
+        created_at = created_at.isoformat(timespec="minutes")
+    elif created_at is None:
+        created_at = ""
+
+    return normalize_report({
+        "id": row.get("id"),
+        "lng": row.get("lng"),
+        "lat": row.get("lat"),
+        "type": row.get("type", "신고"),
+        "intensity": row.get("intensity", 3),
+        "time": row.get("report_time", ""),
+        "created_at": created_at,
+        "desc": row.get("description", ""),
+        "dong": row.get("dong", ""),
+    })
+
+def ensure_reports_table():
+    conn = get_db_connection()
+    try:
+        with conn:
+            with conn.cursor() as cur:
+                cur.execute(f"""
+                    CREATE TABLE IF NOT EXISTS {REPORTS_TABLE} (
+                        id BIGSERIAL PRIMARY KEY,
+                        lng DOUBLE PRECISION NOT NULL,
+                        lat DOUBLE PRECISION NOT NULL,
+                        type TEXT NOT NULL DEFAULT '신고',
+                        intensity INTEGER NOT NULL CHECK (intensity BETWEEN 1 AND 5),
+                        report_time TEXT NOT NULL DEFAULT '',
+                        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        description TEXT NOT NULL DEFAULT '',
+                        dong TEXT NOT NULL DEFAULT ''
+                    )
+                """)
+                cur.execute(f"CREATE INDEX IF NOT EXISTS idx_{REPORTS_TABLE}_created_at ON {REPORTS_TABLE} (created_at)")
+                cur.execute(f"CREATE INDEX IF NOT EXISTS idx_{REPORTS_TABLE}_dong ON {REPORTS_TABLE} (dong)")
+    finally:
+        conn.close()
+
+def load_reports_from_db():
+    from psycopg2.extras import RealDictCursor
+
+    ensure_reports_table()
+    conn = get_db_connection()
+    try:
+        with conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(f"""
+                    SELECT id, lng, lat, type, intensity, report_time, created_at, description, dong
+                    FROM {REPORTS_TABLE}
+                    ORDER BY id ASC
+                """)
+                return [row_to_report(row) for row in cur.fetchall()]
+    finally:
+        conn.close()
+
+def insert_report_to_db(report):
+    from psycopg2.extras import RealDictCursor
+
+    ensure_reports_table()
+    normalized = normalize_report(report)
+    created_at = parse_report_datetime(normalized) or datetime.now()
+
+    conn = get_db_connection()
+    try:
+        with conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    f"""
+                    INSERT INTO {REPORTS_TABLE}
+                        (lng, lat, type, intensity, report_time, created_at, description, dong)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    RETURNING id, lng, lat, type, intensity, report_time, created_at, description, dong
+                    """,
+                    (
+                        normalized["lng"],
+                        normalized["lat"],
+                        normalized["type"],
+                        normalized["intensity"],
+                        str(normalized.get("time", "")),
+                        created_at,
+                        str(normalized.get("desc", "")),
+                        normalized["dong"],
+                    ),
+                )
+                return row_to_report(cur.fetchone())
+    finally:
+        conn.close()
+
+def persist_report(report):
+    if is_database_enabled():
+        try:
+            return insert_report_to_db(report)
+        except Exception as e:
+            st.error(f"DB 저장 오류: {e}")
+            return None
+
+    return normalize_report(report)
+
 def load_reports():
+    if is_database_enabled():
+        try:
+            st.session_state.storage_backend = "PostgreSQL"
+            return load_reports_from_db()
+        except Exception as e:
+            st.warning(f"PostgreSQL 연결 실패로 reports.json을 임시 사용합니다: {e}")
+            st.session_state.storage_backend = "reports.json fallback"
+
     if os.path.exists(REPORTS_FILE):
         try:
             with open(REPORTS_FILE, "r", encoding="utf-8") as f:
+                st.session_state.storage_backend = "reports.json"
                 return json.load(f)
         except:
             return []
+    st.session_state.storage_backend = "reports.json"
     return []
 
 def save_reports(reports):
+    if is_database_enabled():
+        return True
+
     try:
         with open(REPORTS_FILE, "w", encoding="utf-8") as f:
             json.dump(reports, f, ensure_ascii=False, indent=2)
@@ -1094,7 +1242,7 @@ with col_left:
         if st.form_submit_button("📌 신고 등록", use_container_width=True):
             dong = get_dong_by_coords(lat, lng)
             created_at = datetime.now()
-            st.session_state.reports.append({
+            new_report = {
                 "id": st.session_state.next_id,
                 "lng": lng,
                 "lat": lat,
@@ -1104,18 +1252,21 @@ with col_left:
                 "created_at": created_at.isoformat(timespec="minutes"),
                 "desc": desc,
                 "dong": dong,
-            })
-            st.session_state.next_id += 1
-            save_reports(st.session_state.reports)
+            }
+            saved_report = persist_report(new_report)
+            if saved_report:
+                st.session_state.reports.append(saved_report)
+                st.session_state.next_id = max(st.session_state.next_id, saved_report["id"] + 1)
+                save_reports(st.session_state.reports)
             
-            # 클릭 상태 초기화
-            st.session_state.clicked_lat = None
-            st.session_state.clicked_lng = None
-            st.session_state.location_input_version += 1
-            st.session_state.map_click_msg = False
-            
-            st.success(f"✅ 신고 저장 | {dong}")
-            st.rerun()
+                # 클릭 상태 초기화
+                st.session_state.clicked_lat = None
+                st.session_state.clicked_lng = None
+                st.session_state.location_input_version += 1
+                st.session_state.map_click_msg = False
+
+                st.success(f"✅ 신고 저장 | {dong}")
+                st.rerun()
     
     st.markdown("---")
     
@@ -1148,6 +1299,7 @@ with col_left:
             try:
                 df = pd.read_csv(uploaded)
                 uploaded_at = datetime.now()
+                saved_count = 0
                 for _, row in df.iterrows():
                     lat = float(row.get("lat", 37.5630))
                     lng = float(row.get("lng", row.get("lon", 126.9945)))
@@ -1156,7 +1308,7 @@ with col_left:
                         row_created_at = row.get("timestamp", uploaded_at.isoformat(timespec="minutes"))
                     if pd.isna(row_created_at):
                         row_created_at = uploaded_at.isoformat(timespec="minutes")
-                    st.session_state.reports.append({
+                    new_report = {
                         "id": st.session_state.next_id,
                         "lng": lng,
                         "lat": lat,
@@ -1166,11 +1318,15 @@ with col_left:
                         "created_at": str(row_created_at),
                         "desc": str(row.get("desc", "")),
                         "dong": get_dong_by_coords(lat, lng),
-                    })
-                    st.session_state.next_id += 1
+                    }
+                    saved_report = persist_report(new_report)
+                    if saved_report:
+                        st.session_state.reports.append(saved_report)
+                        st.session_state.next_id = max(st.session_state.next_id, saved_report["id"] + 1)
+                        saved_count += 1
                 
                 save_reports(st.session_state.reports)
-                st.success(f"✅ {len(df)} 건 업로드")
+                st.success(f"✅ {saved_count} 건 업로드")
                 st.session_state.show_upload = False
                 st.rerun()
             except Exception as e:
@@ -1529,4 +1685,8 @@ with col_f1:
 with col_f2:
     st.caption(f"📍 **범위**: 서울 중구 | **격자**: {GRID_SIZE_M}m | **영향 반경**: {REPORT_INFLUENCE_RADIUS_M}m | **동**: {len(JUNGGU_DONGS)}개")
 with col_f3:
-    st.caption("💾 자동 저장: reports.json | 최종 업데이트: 2026-06-16")
+    storage_backend = st.session_state.get(
+        "storage_backend",
+        "PostgreSQL" if is_database_enabled() else "reports.json",
+    )
+    st.caption(f"💾 자동 저장: {storage_backend} | 최종 업데이트: 2026-06-18")

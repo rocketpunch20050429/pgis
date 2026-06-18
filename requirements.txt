@@ -4,3 +4,4 @@ openpyxl>=3.0
 folium>=0.14
 streamlit-folium>=0.11
 plotly>=5.0
+psycopg2-binary>=2.9
