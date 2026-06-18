@@ -596,6 +596,208 @@ def get_color(value):
     else:
         return "#d85745"
 
+def get_probability_grade(probability):
+    if probability >= 0.46:
+        return {
+            "label": "고위험",
+            "color": "#d85745",
+            "soft": "#fff1f0",
+            "text": "주변 신고 강도와 밀도가 함께 높습니다. 현장 점검 우선순위를 높이는 편이 타당합니다.",
+        }
+    if probability >= 0.30:
+        return {
+            "label": "주의",
+            "color": "#e9873f",
+            "soft": "#fff7ed",
+            "text": "즉각적인 위험 신호가 일부 관측됩니다. 유사 신고가 반복되는지 추적이 필요합니다.",
+        }
+    if probability >= 0.16:
+        return {
+            "label": "관찰",
+            "color": "#d6bd3f",
+            "soft": "#fefce8",
+            "text": "현재는 중간 수준입니다. 주변 신고가 누적되면 위험 추정치가 빠르게 변할 수 있습니다.",
+        }
+    return {
+        "label": "낮음",
+        "color": "#6cc3b0",
+        "soft": "#ecfdf5",
+        "text": "현재 반경 내 신고 영향은 제한적입니다. 다만 현장 조건 변화는 계속 확인해야 합니다.",
+    }
+
+def format_distance(distance_m):
+    if distance_m is None:
+        return "-"
+    if distance_m < 1000:
+        return f"{distance_m:.0f}m"
+    return f"{distance_m / 1000:.1f}km"
+
+def get_query_context(lat, lng, reports, stats):
+    nearby_reports = []
+    type_counts = {}
+
+    for report in reports:
+        distance = haversine_distance(lat, lng, report["lat"], report["lng"])
+        weight = get_report_distance_weight(distance)
+        if weight <= 0:
+            continue
+
+        report_type = str(report.get("type", "신고"))
+        type_counts[report_type] = type_counts.get(report_type, 0) + 1
+        nearby_reports.append({
+            "report": report,
+            "distance": distance,
+            "weight": weight,
+        })
+
+    nearby_reports.sort(key=lambda item: item["distance"])
+    nearest_distance = nearby_reports[0]["distance"] if nearby_reports else None
+    dominant_type = max(type_counts, key=type_counts.get) if type_counts else "관측 없음"
+    avg_intensity = (
+        sum(item["report"]["intensity"] for item in nearby_reports) / len(nearby_reports)
+        if nearby_reports else 0
+    )
+    confidence_score = min(100, round((stats["weighted_count"] / 2.2) * 100))
+    if confidence_score >= 70:
+        confidence_label = "높음"
+    elif confidence_score >= 35:
+        confidence_label = "보통"
+    elif stats["report_count"] > 0:
+        confidence_label = "낮음"
+    else:
+        confidence_label = "자료 부족"
+
+    return {
+        "nearby_reports": nearby_reports,
+        "nearest_distance": nearest_distance,
+        "dominant_type": dominant_type,
+        "avg_intensity": avg_intensity,
+        "confidence_score": confidence_score,
+        "confidence_label": confidence_label,
+    }
+
+def build_query_popup_html(lat, lng, dong, stats, reports):
+    probability = stats["posterior"]
+    grade = get_probability_grade(probability)
+    context = get_query_context(lat, lng, reports, stats)
+    probability_percent = max(0, min(100, probability * 100))
+    density_percent = max(0, min(100, stats["density_factor"] * 100))
+    confidence_percent = max(6, min(100, context["confidence_score"]))
+    local_score = stats["local_risk"] * 5 if stats["weighted_count"] > 0 else 0
+    nearest_text = format_distance(context["nearest_distance"])
+    dominant_type = html.escape(context["dominant_type"])
+
+    if context["nearby_reports"]:
+        report_rows = []
+        for item in context["nearby_reports"][:3]:
+            report = item["report"]
+            report_type = html.escape(str(report.get("type", "신고")))
+            report_time = html.escape(str(report.get("time", "-")))
+            report_rows.append(f"""
+            <div style="display:flex; gap:9px; align-items:flex-start; padding:8px 0; border-top:1px solid #e5e7eb;">
+                <div style="width:7px; height:7px; border-radius:99px; background:{grade['color']}; margin-top:6px; flex:0 0 auto;"></div>
+                <div style="flex:1; min-width:0;">
+                    <div style="display:flex; justify-content:space-between; gap:8px; font-size:12px; color:#0f172a; font-weight:750;">
+                        <span>{report_type}</span>
+                        <span style="color:#64748b; font-weight:650;">{format_distance(item['distance'])}</span>
+                    </div>
+                    <div style="font-size:11px; color:#64748b; margin-top:2px;">위험도 {report['intensity']}/5 · {report_time}</div>
+                </div>
+            </div>
+            """)
+        nearby_html = "".join(report_rows)
+    else:
+        nearby_html = """
+        <div style="padding:10px 0 2px; color:#64748b; font-size:12px; border-top:1px solid #e5e7eb;">
+            반경 850m 안에 반영된 신고가 없어 기본 위험률을 중심으로 추정했습니다.
+        </div>
+        """
+
+    return f"""
+    <div class="query-risk-popup" style="width:372px; overflow:hidden; font-family:system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color:#0f172a; border-radius:14px; background:#ffffff;">
+        <div style="padding:16px 17px 15px; color:#ffffff; background:linear-gradient(135deg, #172033 0%, #31526b 58%, {grade['color']} 100%);">
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
+                <div style="font-size:12px; opacity:0.86; font-weight:650;">베이지안 예상 사고확률</div>
+                <div style="padding:5px 9px; border-radius:999px; background:rgba(255,255,255,0.18); border:1px solid rgba(255,255,255,0.24); font-size:11px; font-weight:800;">{grade['label']}</div>
+            </div>
+            <div style="display:flex; align-items:flex-end; justify-content:space-between; gap:12px; margin-top:10px;">
+                <div>
+                    <div style="font-size:34px; line-height:1; font-weight:850;">{probability:.2%}</div>
+                    <div style="font-size:12px; opacity:0.86; margin-top:7px;">{html.escape(dong)} · 위도 {lat:.5f}, 경도 {lng:.5f}</div>
+                </div>
+                <div style="font-size:11px; text-align:right; opacity:0.88;">분석 반경<br/><b>{REPORT_INFLUENCE_RADIUS_M}m</b></div>
+            </div>
+            <div style="height:7px; border-radius:999px; background:rgba(255,255,255,0.23); overflow:hidden; margin-top:14px;">
+                <div style="width:{probability_percent:.1f}%; height:100%; border-radius:999px; background:#ffffff;"></div>
+            </div>
+        </div>
+
+        <div style="padding:14px 16px 15px;">
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                <div style="padding:10px; border:1px solid #e5e7eb; border-radius:10px; background:#f8fafc;">
+                    <div style="font-size:11px; color:#64748b; font-weight:700;">영향 신고</div>
+                    <div style="font-size:18px; font-weight:850; margin-top:3px;">{stats['report_count']}건</div>
+                </div>
+                <div style="padding:10px; border:1px solid #e5e7eb; border-radius:10px; background:#f8fafc;">
+                    <div style="font-size:11px; color:#64748b; font-weight:700;">가장 가까운 신고</div>
+                    <div style="font-size:18px; font-weight:850; margin-top:3px;">{nearest_text}</div>
+                </div>
+                <div style="padding:10px; border:1px solid #e5e7eb; border-radius:10px; background:#f8fafc;">
+                    <div style="font-size:11px; color:#64748b; font-weight:700;">주변 평균 위험도</div>
+                    <div style="font-size:18px; font-weight:850; margin-top:3px;">{context['avg_intensity']:.1f}/5</div>
+                </div>
+                <div style="padding:10px; border:1px solid #e5e7eb; border-radius:10px; background:#f8fafc;">
+                    <div style="font-size:11px; color:#64748b; font-weight:700;">주요 유형</div>
+                    <div style="font-size:15px; font-weight:850; margin-top:5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{dominant_type}</div>
+                </div>
+            </div>
+
+            <div style="margin-top:11px; padding:11px 12px; border-radius:10px; background:{grade['soft']}; border:1px solid rgba(15,23,42,0.07); color:#334155; font-size:12px; line-height:1.45;">
+                {grade['text']}
+            </div>
+
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:12px;">
+                <div>
+                    <div style="display:flex; justify-content:space-between; font-size:11px; color:#64748b; font-weight:700;">
+                        <span>신뢰도</span><span>{context['confidence_label']}</span>
+                    </div>
+                    <div style="height:6px; border-radius:999px; background:#e5e7eb; overflow:hidden; margin-top:6px;">
+                        <div style="width:{confidence_percent:.1f}%; height:100%; background:#2563eb; border-radius:999px;"></div>
+                    </div>
+                </div>
+                <div>
+                    <div style="display:flex; justify-content:space-between; font-size:11px; color:#64748b; font-weight:700;">
+                        <span>밀도 영향</span><span>{density_percent:.0f}%</span>
+                    </div>
+                    <div style="height:6px; border-radius:999px; background:#e5e7eb; overflow:hidden; margin-top:6px;">
+                        <div style="width:{max(4, density_percent):.1f}%; height:100%; background:{grade['color']}; border-radius:999px;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div style="margin-top:13px; display:grid; grid-template-columns:repeat(3, 1fr); gap:7px; text-align:center;">
+                <div style="border-radius:9px; background:#f8fafc; padding:8px 4px;">
+                    <div style="font-size:10px; color:#64748b; font-weight:700;">사전확률</div>
+                    <div style="font-size:13px; font-weight:850; margin-top:2px;">10.0%</div>
+                </div>
+                <div style="border-radius:9px; background:#f8fafc; padding:8px 4px;">
+                    <div style="font-size:10px; color:#64748b; font-weight:700;">국소 위험</div>
+                    <div style="font-size:13px; font-weight:850; margin-top:2px;">{local_score:.1f}/5</div>
+                </div>
+                <div style="border-radius:9px; background:#f8fafc; padding:8px 4px;">
+                    <div style="font-size:10px; color:#64748b; font-weight:700;">가능도</div>
+                    <div style="font-size:13px; font-weight:850; margin-top:2px;">{stats['likelihood']:.1%}</div>
+                </div>
+            </div>
+
+            <div style="margin-top:13px;">
+                <div style="font-size:12px; font-weight:850; margin-bottom:2px;">주변 신고 근거</div>
+                {nearby_html}
+            </div>
+        </div>
+    </div>
+    """
+
 def get_heat_weight(value):
     return max(0.0, min(1.0, (value - 0.08) / 0.42))
 
@@ -793,6 +995,8 @@ if "location_input_version" not in st.session_state:
     st.session_state.location_input_version = 0
 if "map_click_msg" not in st.session_state:
     st.session_state.map_click_msg = False
+if "map_focus" not in st.session_state:
+    st.session_state.map_focus = "register"
 
 # ========== 메인 헤더 ==========
 st.markdown(f"""
@@ -1000,17 +1204,41 @@ with col_right:
     selected_map_lat = st.session_state.clicked_lat
     selected_map_lng = st.session_state.clicked_lng
     has_selected_location = selected_map_lat is not None and selected_map_lng is not None
-    map_center = [selected_map_lat, selected_map_lng] if has_selected_location else JUNGGU_CENTER
+    if st.session_state.map_focus == "query" and has_query_location:
+        map_center = [query_lat, query_lng]
+    elif has_selected_location:
+        map_center = [selected_map_lat, selected_map_lng]
+    elif has_query_location:
+        map_center = [query_lat, query_lng]
+    else:
+        map_center = JUNGGU_CENTER
     
     # 지도 생성
     m = folium.Map(
         location=map_center,
-        zoom_start=15 if has_selected_location else 13,
+        zoom_start=15 if has_selected_location or has_query_location else 13,
         tiles="CartoDB positron",
         control_scale=True,
         prefer_canvas=True,
     )
     RightClickQueryHandler().add_to(m)
+    m.get_root().header.add_child(folium.Element("""
+    <style>
+        .leaflet-popup:has(.query-risk-popup) .leaflet-popup-content-wrapper {
+            padding: 0 !important;
+            border-radius: 16px !important;
+            overflow: hidden;
+            box-shadow: 0 22px 52px rgba(15, 23, 42, 0.22) !important;
+        }
+        .leaflet-popup:has(.query-risk-popup) .leaflet-popup-content {
+            margin: 0 !important;
+            width: 372px !important;
+        }
+        .leaflet-popup:has(.query-risk-popup) .leaflet-popup-tip {
+            box-shadow: 0 8px 20px rgba(15, 23, 42, 0.16) !important;
+        }
+    </style>
+    """))
     
     # 위험도 레이어
     visible_cells = [
@@ -1107,14 +1335,7 @@ with col_right:
         query_dong = get_dong_by_coords(query_lat, query_lng)
         probability = query_stats["posterior"]
         probability_color = get_color(probability)
-        query_popup = f"""
-        <div style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; min-width: 180px;">
-            <div style="font-weight: 700; color: #0f172a; margin-bottom: 4px;">예상 사고확률</div>
-            <div style="font-size: 18px; font-weight: 800; color: {probability_color};">{probability:.2%}</div>
-            <div style="color: #475569; font-size: 12px;">{query_dong}</div>
-            <div style="color: #475569; font-size: 12px;">영향 신고 {query_stats['report_count']}건</div>
-        </div>
-        """
+        query_popup = build_query_popup_html(query_lat, query_lng, query_dong, query_stats, reports_for_map)
         folium.CircleMarker(
             location=[query_lat, query_lng],
             radius=12,
@@ -1124,7 +1345,7 @@ with col_right:
             fill=True,
             fillColor=probability_color,
             fillOpacity=0.24,
-            popup=folium.Popup(query_popup, max_width=250),
+            popup=folium.Popup(query_popup, max_width=420, show=True),
             tooltip=f"예상 사고확률 {probability:.1%}",
         ).add_to(m)
     
@@ -1227,6 +1448,7 @@ with col_right:
                 st.session_state.clicked_lng = clicked_lng
                 st.session_state.location_input_version += 1
                 st.session_state.map_click_msg = True
+                st.session_state.map_focus = "register"
                 st.rerun()
         elif interaction_type == "query":
             is_new_query = (
@@ -1238,6 +1460,7 @@ with col_right:
             if is_new_query:
                 st.session_state.query_lat = clicked_lat
                 st.session_state.query_lng = clicked_lng
+                st.session_state.map_focus = "query"
                 st.rerun()
 
 # ========== 하단: 분석 ==========
