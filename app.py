@@ -383,6 +383,48 @@ def coerce_int(value, default):
     except (TypeError, ValueError):
         return default
 
+def get_csv_value(row, candidates, default=None):
+    values = {str(key).strip().lower(): value for key, value in row.items()}
+    for candidate in candidates:
+        value = values.get(candidate.lower())
+        if value is None or pd.isna(value):
+            continue
+        if isinstance(value, str) and not value.strip():
+            continue
+        return value
+    return default
+
+def build_report_from_csv_row(row, report_id, uploaded_at):
+    lat_value = get_csv_value(row, ["lat", "latitude", "위도", "y"])
+    lng_value = get_csv_value(row, ["lng", "lon", "longitude", "경도", "x"])
+    lat = coerce_float(lat_value, None)
+    lng = coerce_float(lng_value, None)
+    if lat is None or lng is None:
+        return None
+
+    report_type = str(get_csv_value(row, ["type", "위험 유형", "위험유형", "신고유형", "종류"], "신고"))
+    intensity = max(1, min(5, coerce_int(get_csv_value(row, ["intensity", "위험도", "risk"], 3), 3)))
+    report_time = str(get_csv_value(row, ["time", "report_time", "시간"], uploaded_at.strftime("%m-%d %H:%M")))
+    created_at = get_csv_value(
+        row,
+        ["created_at", "timestamp", "datetime", "date", "신고일시", "날짜"],
+        uploaded_at.isoformat(timespec="minutes"),
+    )
+    desc = str(get_csv_value(row, ["desc", "description", "상세 설명", "상세설명", "설명", "내용"], ""))
+    dong = str(get_csv_value(row, ["dong", "동", "행정동"], get_dong_by_coords(lat, lng)))
+
+    return {
+        "id": report_id,
+        "lng": lng,
+        "lat": lat,
+        "type": report_type,
+        "intensity": intensity,
+        "time": report_time,
+        "created_at": str(created_at),
+        "desc": desc,
+        "dong": dong or get_dong_by_coords(lat, lng),
+    }
+
 def normalize_report(report):
     if not isinstance(report, dict):
         return None
@@ -603,27 +645,27 @@ def get_probability_grade(probability):
             "label": "고위험",
             "color": "#d85745",
             "soft": "#fff1f0",
-            "text": "주변 신고 강도와 밀도가 함께 높습니다. 현장 점검 우선순위를 높이는 편이 타당합니다.",
+            "text": "근처 신고가 많고 위험도도 높습니다. 현장 확인을 먼저 하는 것이 좋습니다.",
         }
     if probability >= 0.30:
         return {
             "label": "주의",
             "color": "#e9873f",
             "soft": "#fff7ed",
-            "text": "즉각적인 위험 신호가 일부 관측됩니다. 유사 신고가 반복되는지 추적이 필요합니다.",
+            "text": "근처에 위험 신호가 일부 있습니다. 같은 문제가 반복되는지 지켜볼 필요가 있습니다.",
         }
     if probability >= 0.16:
         return {
             "label": "관찰",
             "color": "#d6bd3f",
             "soft": "#fefce8",
-            "text": "현재는 중간 수준입니다. 주변 신고가 누적되면 위험 추정치가 빠르게 변할 수 있습니다.",
+            "text": "현재는 중간 정도입니다. 근처 신고가 더 쌓이면 결과가 달라질 수 있습니다.",
         }
     return {
         "label": "낮음",
         "color": "#6cc3b0",
         "soft": "#ecfdf5",
-        "text": "현재 반경 내 신고 영향은 제한적입니다. 다만 현장 조건 변화는 계속 확인해야 합니다.",
+        "text": "현재 근처 신고 영향은 크지 않습니다. 그래도 현장 상황은 계속 바뀔 수 있습니다.",
     }
 
 def format_distance(distance_m):
@@ -660,13 +702,13 @@ def get_query_context(lat, lng, reports, stats):
     )
     confidence_score = min(100, round((stats["weighted_count"] / 2.2) * 100))
     if confidence_score >= 70:
-        confidence_label = "높음"
+        confidence_label = "충분"
     elif confidence_score >= 35:
         confidence_label = "보통"
     elif stats["report_count"] > 0:
-        confidence_label = "낮음"
+        confidence_label = "적음"
     else:
-        confidence_label = "자료 부족"
+        confidence_label = "없음"
 
     return {
         "nearby_reports": nearby_reports,
@@ -710,7 +752,7 @@ def build_query_popup_html(lat, lng, dong, stats, reports):
     else:
         nearby_html = """
         <div style="padding:10px 0 2px; color:#64748b; font-size:12px; border-top:1px solid #e5e7eb;">
-            반경 850m 안에 반영된 신고가 없어 기본 위험률을 중심으로 추정했습니다.
+            반경 850m 안에 참고할 신고가 없어 기본 위험 기준으로 계산했습니다.
         </div>
         """
 
@@ -718,7 +760,7 @@ def build_query_popup_html(lat, lng, dong, stats, reports):
     <div class="query-risk-popup" style="width:372px; overflow:hidden; font-family:system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color:#0f172a; border-radius:14px; background:#ffffff;">
         <div style="padding:16px 17px 15px; color:#ffffff; background:linear-gradient(135deg, #172033 0%, #31526b 58%, {grade['color']} 100%);">
             <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
-                <div style="font-size:12px; opacity:0.86; font-weight:650;">베이지안 예상 사고확률</div>
+                <div style="font-size:12px; opacity:0.86; font-weight:650;">예상 사고 가능성</div>
                 <div style="padding:5px 9px; border-radius:999px; background:rgba(255,255,255,0.18); border:1px solid rgba(255,255,255,0.24); font-size:11px; font-weight:800;">{grade['label']}</div>
             </div>
             <div style="display:flex; align-items:flex-end; justify-content:space-between; gap:12px; margin-top:10px;">
@@ -726,7 +768,7 @@ def build_query_popup_html(lat, lng, dong, stats, reports):
                     <div style="font-size:34px; line-height:1; font-weight:850;">{probability:.2%}</div>
                     <div style="font-size:12px; opacity:0.86; margin-top:7px;">{html.escape(dong)} · 위도 {lat:.5f}, 경도 {lng:.5f}</div>
                 </div>
-                <div style="font-size:11px; text-align:right; opacity:0.88;">분석 반경<br/><b>{REPORT_INFLUENCE_RADIUS_M}m</b></div>
+                <div style="font-size:11px; text-align:right; opacity:0.88;">살펴본 범위<br/><b>{REPORT_INFLUENCE_RADIUS_M}m</b></div>
             </div>
             <div style="height:7px; border-radius:999px; background:rgba(255,255,255,0.23); overflow:hidden; margin-top:14px;">
                 <div style="width:{probability_percent:.1f}%; height:100%; border-radius:999px; background:#ffffff;"></div>
@@ -736,15 +778,15 @@ def build_query_popup_html(lat, lng, dong, stats, reports):
         <div style="padding:14px 16px 15px;">
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
                 <div style="padding:10px; border:1px solid #e5e7eb; border-radius:10px; background:#f8fafc;">
-                    <div style="font-size:11px; color:#64748b; font-weight:700;">영향 신고</div>
+                    <div style="font-size:11px; color:#64748b; font-weight:700;">근처 신고</div>
                     <div style="font-size:18px; font-weight:850; margin-top:3px;">{stats['report_count']}건</div>
                 </div>
                 <div style="padding:10px; border:1px solid #e5e7eb; border-radius:10px; background:#f8fafc;">
-                    <div style="font-size:11px; color:#64748b; font-weight:700;">가장 가까운 신고</div>
+                    <div style="font-size:11px; color:#64748b; font-weight:700;">가까운 신고</div>
                     <div style="font-size:18px; font-weight:850; margin-top:3px;">{nearest_text}</div>
                 </div>
                 <div style="padding:10px; border:1px solid #e5e7eb; border-radius:10px; background:#f8fafc;">
-                    <div style="font-size:11px; color:#64748b; font-weight:700;">주변 평균 위험도</div>
+                    <div style="font-size:11px; color:#64748b; font-weight:700;">근처 위험도 평균</div>
                     <div style="font-size:18px; font-weight:850; margin-top:3px;">{context['avg_intensity']:.1f}/5</div>
                 </div>
                 <div style="padding:10px; border:1px solid #e5e7eb; border-radius:10px; background:#f8fafc;">
@@ -760,7 +802,7 @@ def build_query_popup_html(lat, lng, dong, stats, reports):
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:12px;">
                 <div>
                     <div style="display:flex; justify-content:space-between; font-size:11px; color:#64748b; font-weight:700;">
-                        <span>신뢰도</span><span>{context['confidence_label']}</span>
+                        <span>참고할 신고</span><span>{context['confidence_label']}</span>
                     </div>
                     <div style="height:6px; border-radius:999px; background:#e5e7eb; overflow:hidden; margin-top:6px;">
                         <div style="width:{confidence_percent:.1f}%; height:100%; background:#2563eb; border-radius:999px;"></div>
@@ -768,7 +810,7 @@ def build_query_popup_html(lat, lng, dong, stats, reports):
                 </div>
                 <div>
                     <div style="display:flex; justify-content:space-between; font-size:11px; color:#64748b; font-weight:700;">
-                        <span>밀도 영향</span><span>{density_percent:.0f}%</span>
+                        <span>신고 모임 정도</span><span>{density_percent:.0f}%</span>
                     </div>
                     <div style="height:6px; border-radius:999px; background:#e5e7eb; overflow:hidden; margin-top:6px;">
                         <div style="width:{max(4, density_percent):.1f}%; height:100%; background:{grade['color']}; border-radius:999px;"></div>
@@ -778,21 +820,21 @@ def build_query_popup_html(lat, lng, dong, stats, reports):
 
             <div style="margin-top:13px; display:grid; grid-template-columns:repeat(3, 1fr); gap:7px; text-align:center;">
                 <div style="border-radius:9px; background:#f8fafc; padding:8px 4px;">
-                    <div style="font-size:10px; color:#64748b; font-weight:700;">사전확률</div>
+                    <div style="font-size:10px; color:#64748b; font-weight:700;">기본 위험</div>
                     <div style="font-size:13px; font-weight:850; margin-top:2px;">10.0%</div>
                 </div>
                 <div style="border-radius:9px; background:#f8fafc; padding:8px 4px;">
-                    <div style="font-size:10px; color:#64748b; font-weight:700;">국소 위험</div>
+                    <div style="font-size:10px; color:#64748b; font-weight:700;">주변 위험</div>
                     <div style="font-size:13px; font-weight:850; margin-top:2px;">{local_score:.1f}/5</div>
                 </div>
                 <div style="border-radius:9px; background:#f8fafc; padding:8px 4px;">
-                    <div style="font-size:10px; color:#64748b; font-weight:700;">가능도</div>
+                    <div style="font-size:10px; color:#64748b; font-weight:700;">신고 반영</div>
                     <div style="font-size:13px; font-weight:850; margin-top:2px;">{stats['likelihood']:.1%}</div>
                 </div>
             </div>
 
             <div style="margin-top:13px;">
-                <div style="font-size:12px; font-weight:850; margin-bottom:2px;">주변 신고 근거</div>
+                <div style="font-size:12px; font-weight:850; margin-bottom:2px;">계산에 참고한 신고</div>
                 {nearby_html}
             </div>
         </div>
@@ -870,6 +912,13 @@ class RightClickQueryHandler(MacroElement):
             window.Streamlit.setComponentValue(data);
         }});
     {{% endmacro %}}
+    """)
+
+class BottomRightZoomControl(MacroElement):
+    _template = Template("""
+    {% macro script(this, kwargs) %}
+        L.control.zoom({ position: "bottomright" }).addTo({{ this._parent.get_name() }});
+    {% endmacro %}
     """)
 
 def render_report_status_table(df_reports, selected_dong):
@@ -1275,14 +1324,16 @@ with col_left:
     
     col_a, col_b = st.columns(2)
     with col_a:
-        if st.button("⬇️ CSV 내보내기", use_container_width=True):
+        if st.button("⬇️ CSV 다운로드", use_container_width=True):
             if st.session_state.reports:
-                df = pd.DataFrame(st.session_state.reports)
+                df = pd.DataFrame(normalize_reports(st.session_state.reports))
+                export_columns = ["id", "lat", "lng", "dong", "type", "intensity", "time", "created_at", "desc"]
+                df = df[[col for col in export_columns if col in df.columns]]
                 csv = df.to_csv(index=False, encoding="utf-8-sig")
                 st.download_button(
-                    "다운로드",
+                    "지도 데이터 CSV 다운로드",
                     csv,
-                    f"reports_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                    f"pgis_map_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
                     "text/csv",
                     use_container_width=True
                 )
@@ -1300,33 +1351,33 @@ with col_left:
                 df = pd.read_csv(uploaded)
                 uploaded_at = datetime.now()
                 saved_count = 0
+                skipped_count = 0
+                last_uploaded_report = None
                 for _, row in df.iterrows():
-                    lat = float(row.get("lat", 37.5630))
-                    lng = float(row.get("lng", row.get("lon", 126.9945)))
-                    row_created_at = row.get("created_at", None)
-                    if pd.isna(row_created_at):
-                        row_created_at = row.get("timestamp", uploaded_at.isoformat(timespec="minutes"))
-                    if pd.isna(row_created_at):
-                        row_created_at = uploaded_at.isoformat(timespec="minutes")
-                    new_report = {
-                        "id": st.session_state.next_id,
-                        "lng": lng,
-                        "lat": lat,
-                        "type": str(row.get("type", "신고")),
-                        "intensity": int(row.get("intensity", 3)),
-                        "time": str(row.get("time", uploaded_at.strftime("%m-%d %H:%M"))),
-                        "created_at": str(row_created_at),
-                        "desc": str(row.get("desc", "")),
-                        "dong": get_dong_by_coords(lat, lng),
-                    }
+                    new_report = build_report_from_csv_row(row, st.session_state.next_id, uploaded_at)
+                    if not new_report:
+                        skipped_count += 1
+                        continue
+
                     saved_report = persist_report(new_report)
                     if saved_report:
                         st.session_state.reports.append(saved_report)
                         st.session_state.next_id = max(st.session_state.next_id, saved_report["id"] + 1)
                         saved_count += 1
+                        last_uploaded_report = saved_report
                 
                 save_reports(st.session_state.reports)
-                st.success(f"✅ {saved_count} 건 업로드")
+                if last_uploaded_report:
+                    st.session_state.clicked_lat = last_uploaded_report["lat"]
+                    st.session_state.clicked_lng = last_uploaded_report["lng"]
+                    st.session_state.location_input_version += 1
+                    st.session_state.map_click_msg = True
+                    st.session_state.map_focus = "register"
+
+                if skipped_count:
+                    st.warning(f"✅ {saved_count}건 업로드 · 위도/경도 누락 {skipped_count}건 제외")
+                else:
+                    st.success(f"✅ {saved_count}건 업로드")
                 st.session_state.show_upload = False
                 st.rerun()
             except Exception as e:
@@ -1374,10 +1425,12 @@ with col_right:
         location=map_center,
         zoom_start=15 if has_selected_location or has_query_location else 13,
         tiles="CartoDB positron",
+        zoom_control=False,
         control_scale=True,
         prefer_canvas=True,
     )
     RightClickQueryHandler().add_to(m)
+    BottomRightZoomControl().add_to(m)
     m.get_root().header.add_child(folium.Element("""
     <style>
         .leaflet-popup:has(.query-risk-popup) .leaflet-popup-content-wrapper {
