@@ -94,250 +94,389 @@ JUNGGU_DONGS = {
 # ========== CSS 스타일 ==========
 CUSTOM_CSS = """
 <style>
-    .main { background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); }
-    
-    .header-main {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        padding: 2rem;
-        border-radius: 12px;
-        margin-bottom: 2rem;
-        box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-    }
-    
-    .header-main h1 { margin: 0; font-size: 2.5rem; font-weight: 700; }
-    .header-main p { margin: 0.5rem 0 0 0; font-size: 1rem; opacity: 0.9; }
-    
-    .metric-card {
-        background: white;
-        padding: 1.5rem;
-        border-radius: 8px;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        text-align: center;
-        border-top: 4px solid #667eea;
-        transition: transform 0.2s, box-shadow 0.2s;
-    }
-    
-    .metric-card:hover {
-        transform: translateY(-4px);
-        box-shadow: 0 8px 16px rgba(0,0,0,0.15);
-    }
-    
-    .click-alert {
-        background: linear-gradient(135deg, #fbbf24 0%, #f97316 100%);
-        color: white;
-        padding: 1.5rem;
-        border-radius: 8px;
-        margin-bottom: 1rem;
-        font-weight: 600;
-        text-align: center;
-        font-size: 1.1rem;
-    }
-    
-    .section-title {
-        color: #667eea;
-        font-size: 1.5rem;
-        font-weight: 600;
-        margin-top: 1.5rem;
-        margin-bottom: 1rem;
-        border-bottom: 2px solid #667eea;
-        padding-bottom: 0.5rem;
-    }
-    
-    .card {
-        background: white;
-        padding: 1.5rem;
-        border-radius: 8px;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        margin-bottom: 1rem;
-    }
-    
-    .stButton > button {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        border: none;
-        padding: 0.75rem 1.5rem;
-        border-radius: 6px;
-        font-weight: 600;
-        transition: all 0.2s;
-        width: 100%;
-    }
-    
-    .stButton > button:hover {
-        box-shadow: 0 8px 16px rgba(102, 126, 234, 0.4);
-        transform: translateY(-2px);
-    }
-    
-    .success-msg {
-        background: #d1fae5;
-        border-left: 4px solid #10b981;
-        color: #065f46;
-        padding: 1rem;
-        border-radius: 6px;
-        margin-top: 1rem;
-    }
+/* ── Global ──────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
 
-    .report-board {
-        background: rgba(255, 255, 255, 0.94);
-        border: 1px solid rgba(148, 163, 184, 0.28);
-        border-radius: 8px;
-        overflow: hidden;
-        box-shadow: 0 18px 42px rgba(15, 23, 42, 0.12);
-    }
+.stApp { background: #f0f4f8 !important; }
+.main .block-container {
+    padding: 1.5rem 2rem 4rem !important;
+    max-width: 1720px !important;
+}
 
-    .report-board__header {
-        display: flex;
-        justify-content: space-between;
-        gap: 1rem;
-        align-items: flex-end;
-        padding: 1rem 1.15rem;
-        border-bottom: 1px solid rgba(148, 163, 184, 0.24);
-        background: linear-gradient(180deg, rgba(248, 250, 252, 0.95), rgba(255, 255, 255, 0.95));
-    }
+/* ── Header ──────────────────────────────────────────────────────────── */
+.pgis-header {
+    position: relative;
+    overflow: hidden;
+    background: #0f172a;
+    border-radius: 16px;
+    padding: 26px 32px 22px;
+    margin-bottom: 18px;
+    box-shadow: 0 24px 48px rgba(15,23,42,.22), inset 0 1px 0 rgba(255,255,255,.05);
+}
+.pgis-header::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+        radial-gradient(ellipse 65% 55% at 90% 50%, rgba(59,130,246,.15) 0%, transparent 65%),
+        radial-gradient(ellipse 45% 80% at 0% 100%, rgba(99,102,241,.1) 0%, transparent 60%);
+    pointer-events: none;
+}
+.pgis-header__eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(59,130,246,.14);
+    border: 1px solid rgba(59,130,246,.3);
+    border-radius: 999px;
+    padding: 3px 10px 3px 8px;
+    font-size: 10.5px;
+    font-weight: 700;
+    color: #93c5fd;
+    letter-spacing: .5px;
+    text-transform: uppercase;
+    margin-bottom: 9px;
+}
+.pgis-header h1 {
+    margin: 0 !important;
+    font-size: 1.875rem !important;
+    font-weight: 900 !important;
+    color: #f8fafc !important;
+    line-height: 1.15 !important;
+    letter-spacing: -.5px !important;
+}
+.pgis-header p {
+    margin: 6px 0 0 !important;
+    font-size: 13px !important;
+    color: #94a3b8 !important;
+    line-height: 1.6 !important;
+}
+.pgis-header__chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 14px;
+}
+.pgis-header__chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: rgba(255,255,255,.07);
+    border: 1px solid rgba(255,255,255,.1);
+    border-radius: 8px;
+    padding: 4px 10px;
+    font-size: 11.5px;
+    font-weight: 600;
+    color: #cbd5e1;
+}
+.pgis-header__chip b { color: #e2e8f0; }
+.pgis-live-dot {
+    display: inline-block;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: #22c55e;
+    box-shadow: 0 0 0 3px rgba(34,197,94,.22);
+    animation: pgis-pulse 2.2s ease-in-out infinite;
+}
+@keyframes pgis-pulse {
+    0%, 100% { box-shadow: 0 0 0 3px rgba(34,197,94,.2); }
+    50%       { box-shadow: 0 0 0 7px rgba(34,197,94,.06); }
+}
 
-    .report-board__title {
-        color: #0f172a;
-        font-size: 1rem;
-        font-weight: 750;
-        line-height: 1.2;
-        margin: 0;
-    }
+/* ── KPI Cards ───────────────────────────────────────────────────────── */
+.pgis-kpi-row {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 10px;
+    margin-bottom: 18px;
+}
+.pgis-kpi {
+    position: relative;
+    overflow: hidden;
+    background: #fff;
+    border-radius: 12px;
+    padding: 16px 18px 14px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 1px 3px rgba(15,23,42,.05);
+    transition: box-shadow .2s, transform .2s;
+    cursor: default;
+}
+.pgis-kpi:hover {
+    box-shadow: 0 8px 24px rgba(15,23,42,.09);
+    transform: translateY(-2px);
+}
+.pgis-kpi__topbar {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    border-radius: 12px 12px 0 0;
+}
+.pgis-kpi__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+.pgis-kpi__label {
+    font-size: 10.5px;
+    font-weight: 700;
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+}
+.pgis-kpi__icon { font-size: 17px; line-height: 1; }
+.pgis-kpi__value {
+    font-size: 28px;
+    font-weight: 900;
+    color: #0f172a;
+    line-height: 1;
+    letter-spacing: -.8px;
+    margin-bottom: 8px;
+}
+.pgis-kpi__delta {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    border-radius: 999px;
+    font-size: 10.5px;
+    font-weight: 700;
+    padding: 2px 8px;
+}
+.pgis-kpi__delta--up   { background: #fee2e2; color: #b91c1c; }
+.pgis-kpi__delta--down { background: #dcfce7; color: #15803d; }
+.pgis-kpi__delta--zero { background: #f1f5f9; color: #64748b; }
 
-    .report-board__sub {
-        color: #64748b;
-        font-size: 0.78rem;
-        margin-top: 0.25rem;
-    }
+/* ── Click alert ─────────────────────────────────────────────────────── */
+.click-alert {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    border-left: 4px solid #f59e0b;
+    border-radius: 10px;
+    color: #92400e;
+    padding: 11px 16px;
+    font-weight: 600;
+    font-size: 13px;
+    margin-bottom: 16px;
+}
 
-    .report-board__meta {
-        display: flex;
-        gap: 0.5rem;
-        flex-wrap: wrap;
-        justify-content: flex-end;
-    }
+/* ── Section heading ─────────────────────────────────────────────────── */
+.pgis-section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+}
+.pgis-section-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 800;
+    color: #0f172a;
+    letter-spacing: -.2px;
+}
+.pgis-section-title__icon {
+    width: 28px; height: 28px;
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; flex-shrink: 0;
+}
+.pgis-hint-row {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+.pgis-hint {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 999px;
+    padding: 4px 11px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #64748b;
+}
+.pgis-hint b { color: #0f172a; }
 
-    .report-pill {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.35rem;
-        border: 1px solid rgba(148, 163, 184, 0.34);
-        border-radius: 999px;
-        color: #334155;
-        background: #ffffff;
-        font-size: 0.74rem;
-        font-weight: 650;
-        padding: 0.34rem 0.58rem;
-        white-space: nowrap;
-    }
+/* ── Buttons ─────────────────────────────────────────────────────────── */
+.stButton > button {
+    background: #0f172a !important;
+    color: #f8fafc !important;
+    border: 1px solid rgba(255,255,255,.06) !important;
+    border-radius: 9px !important;
+    font-weight: 700 !important;
+    font-size: 12.5px !important;
+    padding: 0.6rem 1.2rem !important;
+    transition: background .18s, box-shadow .18s, transform .15s !important;
+    letter-spacing: .1px !important;
+}
+.stButton > button:hover {
+    background: #1e293b !important;
+    box-shadow: 0 6px 18px rgba(15,23,42,.2) !important;
+    transform: translateY(-1px) !important;
+}
+.stButton > button:active { transform: translateY(0) !important; }
 
-    .report-table-wrap {
-        max-height: 460px;
-        overflow: auto;
-    }
+[data-testid="stFormSubmitButton"] > button {
+    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%) !important;
+    color: #fff !important;
+    border: none !important;
+    border-radius: 9px !important;
+    font-weight: 700 !important;
+    box-shadow: 0 4px 14px rgba(37,99,235,.35) !important;
+}
+[data-testid="stFormSubmitButton"] > button:hover {
+    box-shadow: 0 8px 20px rgba(37,99,235,.45) !important;
+    transform: translateY(-1px) !important;
+}
 
-    .report-table {
-        width: 100%;
-        border-collapse: separate;
-        border-spacing: 0;
-        table-layout: fixed;
-        color: #0f172a;
-    }
+.stDownloadButton > button {
+    background: #2563eb !important;
+    color: #fff !important;
+    border: none !important;
+    border-radius: 9px !important;
+    font-weight: 700 !important;
+}
 
-    .report-table thead th {
-        position: sticky;
-        top: 0;
-        z-index: 2;
-        background: #f8fafc;
-        color: #475569;
-        border-bottom: 1px solid rgba(148, 163, 184, 0.32);
-        font-size: 0.72rem;
-        font-weight: 750;
-        letter-spacing: 0;
-        text-align: left;
-        padding: 0.72rem 0.85rem;
-    }
+/* ── Form ────────────────────────────────────────────────────────────── */
+[data-testid="stForm"] {
+    background: #fff !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 12px !important;
+    box-shadow: 0 1px 3px rgba(15,23,42,.05) !important;
+    padding: 1.1rem !important;
+}
 
-    .report-table tbody td {
-        border-bottom: 1px solid rgba(226, 232, 240, 0.86);
-        padding: 0.78rem 0.85rem;
-        vertical-align: middle;
-        font-size: 0.84rem;
-        background: rgba(255, 255, 255, 0.92);
-    }
+/* ── Report board ────────────────────────────────────────────────────── */
+.report-board {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(15,23,42,.05);
+}
+.report-board__header {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    align-items: flex-end;
+    padding: 14px 18px;
+    border-bottom: 1px solid #e2e8f0;
+    background: #f8fafc;
+}
+.report-board__title {
+    color: #0f172a;
+    font-size: 13.5px;
+    font-weight: 800;
+    letter-spacing: -.2px;
+    margin: 0;
+}
+.report-board__sub {
+    color: #94a3b8;
+    font-size: 11.5px;
+    margin-top: 3px;
+}
+.report-board__meta {
+    display: flex;
+    gap: 5px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+.report-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    border: 1px solid #e2e8f0;
+    border-radius: 999px;
+    color: #475569;
+    background: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 9px;
+    white-space: nowrap;
+}
+.report-table-wrap { max-height: 460px; overflow: auto; }
+.report-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    table-layout: fixed;
+    color: #0f172a;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+.report-table thead th {
+    position: sticky; top: 0; z-index: 2;
+    background: #f8fafc;
+    color: #64748b;
+    border-bottom: 1px solid #e2e8f0;
+    font-size: 11px; font-weight: 700;
+    letter-spacing: .4px; text-transform: uppercase;
+    text-align: left;
+    padding: 10px 12px;
+}
+.report-table tbody td {
+    border-bottom: 1px solid #f1f5f9;
+    padding: 10px 12px;
+    vertical-align: middle;
+    font-size: 13px;
+    background: #fff;
+}
+.report-table tbody tr:hover td { background: #f8fafc; }
+.report-table .col-id     { width: 64px; }
+.report-table .col-status { width: 108px; }
+.report-table .col-dong   { width: 108px; }
+.report-table .col-type   { width: 128px; }
+.report-table .col-risk   { width: 158px; }
+.report-table .col-time   { width: 100px; }
+.report-table .col-desc   { width: auto; }
 
-    .report-table tbody tr:nth-child(even) td {
-        background: rgba(248, 250, 252, 0.78);
-    }
+.status-badge, .risk-badge {
+    display: inline-flex; align-items: center;
+    border-radius: 999px;
+    font-size: 11px; font-weight: 700;
+    padding: 3px 8px; white-space: nowrap;
+}
+.status-badge { color: #0f766e; background: #ccfbf1; border: 1px solid rgba(20,184,166,.2); }
+.risk-badge.low  { color: #15803d; background: #dcfce7; }
+.risk-badge.mid  { color: #92400e; background: #fef3c7; }
+.risk-badge.high { color: #b91c1c; background: #fee2e2; }
+.risk-cell { display: grid; gap: 4px; }
+.risk-meter { height: 5px; border-radius: 999px; background: #f1f5f9; overflow: hidden; }
+.risk-meter span {
+    display: block; height: 100%; border-radius: inherit;
+    background: linear-gradient(90deg, #22c55e 0%, #f59e0b 50%, #ef4444 100%);
+}
+.desc-text { color: #64748b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-    .report-table tbody tr:hover td {
-        background: #eef6ff;
-    }
+/* ── Success / info ──────────────────────────────────────────────────── */
+.success-msg {
+    background: #dcfce7;
+    border: 1px solid rgba(34,197,94,.3);
+    border-left: 4px solid #22c55e;
+    color: #14532d;
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+}
 
-    .report-table .col-id { width: 70px; }
-    .report-table .col-status { width: 112px; }
-    .report-table .col-dong { width: 120px; }
-    .report-table .col-type { width: 140px; }
-    .report-table .col-risk { width: 170px; }
-    .report-table .col-time { width: 110px; }
-    .report-table .col-desc { width: auto; }
+/* ── Streamlit overrides ─────────────────────────────────────────────── */
+hr { border: none !important; border-top: 1px solid #e2e8f0 !important; margin: 1rem 0 !important; }
+h3 { font-size: 0.9375rem !important; font-weight: 800 !important; color: #0f172a !important; letter-spacing: -.2px !important; }
+[data-testid="stCaption"] { color: #94a3b8 !important; font-size: 11.5px !important; }
 
-    .status-badge,
-    .risk-badge {
-        display: inline-flex;
-        align-items: center;
-        border-radius: 999px;
-        font-size: 0.72rem;
-        font-weight: 750;
-        padding: 0.28rem 0.52rem;
-        white-space: nowrap;
-    }
-
-    .status-badge {
-        color: #0f766e;
-        background: #ccfbf1;
-        border: 1px solid rgba(20, 184, 166, 0.24);
-    }
-
-    .risk-badge.low {
-        color: #047857;
-        background: #d1fae5;
-    }
-
-    .risk-badge.mid {
-        color: #92400e;
-        background: #fef3c7;
-    }
-
-    .risk-badge.high {
-        color: #b91c1c;
-        background: #fee2e2;
-    }
-
-    .risk-cell {
-        display: grid;
-        gap: 0.38rem;
-    }
-
-    .risk-meter {
-        height: 7px;
-        border-radius: 999px;
-        background: #e2e8f0;
-        overflow: hidden;
-    }
-
-    .risk-meter span {
-        display: block;
-        height: 100%;
-        border-radius: inherit;
-        background: linear-gradient(90deg, #14b8a6, #eab308, #ef4444);
-    }
-
-    .desc-text {
-        color: #475569;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
+/* ── Scrollbar ───────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 </style>
 """
 
@@ -800,6 +939,50 @@ def get_map_interaction(map_data):
 
     return None
 
+def render_kpi_row(overall_stats, today_stats, yesterday_stats, grid_count, dong_count):
+    def _delta(curr, prev):
+        diff = int(curr - prev)
+        if diff > 0: return f"▲ {diff} 전일 대비", "up"
+        if diff < 0: return f"▼ {abs(diff)} 전일 대비", "down"
+        return "전일과 동일", "zero"
+
+    def _delta_f(curr, prev):
+        diff = curr - prev
+        if abs(diff) < 0.05: return "전일과 동일", "zero"
+        if diff > 0: return f"▲ {abs(diff):.1f} 전일 대비", "up"
+        return f"▼ {abs(diff):.1f} 전일 대비", "down"
+
+    count_d, count_c   = _delta(today_stats["count"],           yesterday_stats["count"])
+    avg_d,   avg_c     = _delta_f(today_stats["avg_intensity"],  yesterday_stats["avg_intensity"])
+    high_d,  high_c    = _delta(today_stats["high_risk_count"],  yesterday_stats["high_risk_count"])
+
+    kpis = [
+        {"icon": "📊", "label": "총 신고",    "value": overall_stats["count"],
+         "delta": count_d, "dcls": count_c,  "color": "#3b82f6"},
+        {"icon": "📈", "label": "평균 위험도", "value": f"{overall_stats['avg_intensity']:.1f}",
+         "delta": avg_d,   "dcls": avg_c,    "color": "#f59e0b"},
+        {"icon": "🔴", "label": "고위험 신고", "value": overall_stats["high_risk_count"],
+         "delta": high_d,  "dcls": high_c,   "color": "#ef4444"},
+        {"icon": "⊞",  "label": "분석 격자",  "value": f"{grid_count:,}",
+         "delta": "실시간 갱신",              "dcls": "zero", "color": "#8b5cf6"},
+        {"icon": "🏘",  "label": "행정동 수",  "value": dong_count,
+         "delta": "서울 중구",               "dcls": "zero", "color": "#22c55e"},
+    ]
+    cards = "".join(
+        f'<div class="pgis-kpi">'
+        f'<div class="pgis-kpi__topbar" style="background:{k["color"]};"></div>'
+        f'<div class="pgis-kpi__head">'
+        f'<span class="pgis-kpi__label">{k["label"]}</span>'
+        f'<span class="pgis-kpi__icon">{k["icon"]}</span>'
+        f'</div>'
+        f'<div class="pgis-kpi__value">{k["value"]}</div>'
+        f'<span class="pgis-kpi__delta pgis-kpi__delta--{k["dcls"]}">{k["delta"]}</span>'
+        f'</div>'
+        for k in kpis
+    )
+    return f'<div class="pgis-kpi-row">{cards}</div>'
+
+
 def get_risk_display(intensity):
     if intensity >= 4:
         return "높음", "high"
@@ -844,8 +1027,8 @@ def build_report_popup_html(report):
     ) if desc else ""
 
     return (
-        f'<div style="width:252px;font-family:system-ui,-apple-system,BlinkMacSystemFont,'
-        f"'Segoe UI',sans-serif;border-radius:13px;overflow:hidden;margin:-1px;\">"
+        f'<div class="pgis-report-card" style="width:258px;font-family:system-ui,-apple-system,BlinkMacSystemFont,'
+        f"'Segoe UI',sans-serif;border-radius:13px;overflow:hidden;box-shadow:0 16px 40px rgba(15,23,42,.22);\">"
 
         # ── Header ──────────────────────────────────────────────────────────
         f'<div style="background:{theme["gradient"]};padding:12px 13px 10px;color:#fff;">'
@@ -1208,9 +1391,19 @@ if "map_focus" not in st.session_state:
 
 # ========== 메인 헤더 ==========
 st.markdown(f"""
-<div class="header-main">
-    <h1>🗺️ 서울 중구 안전지도</h1>
-    <p>베이지안 정리 기반 | 좌클릭 신고·우클릭 조회 | 전일 대비 지표 | {len(st.session_state.grid):,}개 격자 분석</p>
+<div class="pgis-header">
+    <div class="pgis-header__eyebrow">
+        <span class="pgis-live-dot"></span>&nbsp;실시간 분석
+    </div>
+    <h1>서울 중구 안전지도</h1>
+    <p>베이지안 정리 기반 위험도 분석 · 좌클릭 신고 등록 · 우클릭 확률 조회 · 마커 호버 신고 상세</p>
+    <div class="pgis-header__chips">
+        <div class="pgis-header__chip">⊞&nbsp;<b>{len(st.session_state.grid):,}</b>개 격자</div>
+        <div class="pgis-header__chip">🏘&nbsp;<b>{len(JUNGGU_DONGS)}</b>개 행정동</div>
+        <div class="pgis-header__chip">📐&nbsp;<b>{GRID_SIZE_M}m</b> 격자 간격</div>
+        <div class="pgis-header__chip">🎯&nbsp;<b>{REPORT_INFLUENCE_RADIUS_M}m</b> 영향 반경</div>
+        <div class="pgis-header__chip">📊&nbsp;<b>{len(st.session_state.reports)}</b>건 누적 신고</div>
+    </div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -1223,35 +1416,10 @@ overall_stats = summarize_reports(st.session_state.reports)
 today_stats = summarize_reports(today_reports)
 yesterday_stats = summarize_reports(yesterday_reports)
 
-col1, col2, col3, col4, col5 = st.columns(5)
-with col1:
-    st.metric(
-        "📊 총 신고",
-        overall_stats["count"],
-        format_metric_delta(today_stats["count"], yesterday_stats["count"], "건"),
-        delta_color="inverse",
-        help="전체 누적 신고 수입니다. 변화량은 오늘 신고 건수에서 어제 신고 건수를 뺀 값입니다.",
-    )
-with col2:
-    st.metric(
-        "📈 평균 위험도",
-        f"{overall_stats['avg_intensity']:.1f}",
-        format_metric_delta(today_stats["avg_intensity"], yesterday_stats["avg_intensity"], "점", 1),
-        delta_color="inverse",
-        help="전체 신고의 평균 위험도입니다. 변화량은 오늘 평균 위험도와 어제 평균 위험도의 차이입니다.",
-    )
-with col3:
-    st.metric(
-        "🔴 고위험",
-        overall_stats["high_risk_count"],
-        format_metric_delta(today_stats["high_risk_count"], yesterday_stats["high_risk_count"], "건"),
-        delta_color="inverse",
-        help="위험도 4점 이상 신고의 누적 수입니다. 변화량은 오늘 고위험 신고 수와 어제 고위험 신고 수의 차이입니다.",
-    )
-with col4:
-    st.metric("📍 격자 셀", len(st.session_state.grid), "±0개 전일 대비", delta_color="off")
-with col5:
-    st.metric("🏘️ 동 구분", len(JUNGGU_DONGS), "±0개 전일 대비", delta_color="off")
+st.markdown(
+    render_kpi_row(overall_stats, today_stats, yesterday_stats, len(st.session_state.grid), len(JUNGGU_DONGS)),
+    unsafe_allow_html=True,
+)
 
 st.divider()
 
@@ -1259,7 +1427,8 @@ st.divider()
 if st.session_state.map_click_msg:
     st.markdown(f"""
     <div class="click-alert">
-        ✅ 위치 선택 완료! 위도: {st.session_state.clicked_lat:.4f} / 경도: {st.session_state.clicked_lng:.4f}
+        <span>📍</span>
+        <span>위치 선택 완료 &nbsp;—&nbsp; 위도 <b>{st.session_state.clicked_lat:.5f}</b> / 경도 <b>{st.session_state.clicked_lng:.5f}</b></span>
     </div>
     """, unsafe_allow_html=True)
 
@@ -1268,7 +1437,14 @@ col_left, col_right = st.columns([0.9, 3.4], gap="medium")
 
 # ========== 좌측: 신고 폼 ==========
 with col_left:
-    st.markdown("### 📝 신고 작성")
+    st.markdown("""
+    <div class="pgis-section-head" style="margin-bottom:10px;">
+        <div class="pgis-section-title">
+            <div class="pgis-section-title__icon" style="background:#eff6ff;">📝</div>
+            신고 작성
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
     
     # 동 선택
     selected_dong = st.selectbox("📍 동 선택", ["전체"] + list(JUNGGU_DONGS.keys()))
@@ -1330,8 +1506,14 @@ with col_left:
     
     st.markdown("---")
     
-    # 데이터 관리
-    st.markdown("### 📊 데이터 관리")
+    st.markdown("""
+    <div class="pgis-section-head" style="margin-bottom:8px;">
+        <div class="pgis-section-title">
+            <div class="pgis-section-title__icon" style="background:#f5f3ff;">📊</div>
+            데이터 관리
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
     
     col_a, col_b = st.columns(2)
     with col_a:
@@ -1399,8 +1581,19 @@ with col_left:
 
 # ========== 우측: 지도 ==========
 with col_right:
-    st.markdown("### 🎯 베이지안 위험도 지도")
-    st.markdown("💡 **좌클릭: 신고 위치 등록 · 우클릭: 예상 사고확률 조회**", help="좌클릭한 좌표는 왼쪽 신고 폼에 입력되고, 우클릭한 좌표는 베이지안 예상 사고확률을 조회합니다.")
+    st.markdown("""
+    <div class="pgis-section-head">
+        <div class="pgis-section-title">
+            <div class="pgis-section-title__icon" style="background:#fef9c3;">🎯</div>
+            베이지안 위험도 지도
+        </div>
+        <div class="pgis-hint-row">
+            <span class="pgis-hint">🖱 <b>좌클릭</b>&nbsp;신고 등록</span>
+            <span class="pgis-hint">🖱 <b>우클릭</b>&nbsp;확률 조회</span>
+            <span class="pgis-hint">✦ <b>마커 호버</b>&nbsp;신고 상세</span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
     
     # 베이지안 계산
     reports_for_map = normalize_reports(st.session_state.reports)
@@ -1437,6 +1630,18 @@ with col_right:
     BottomRightZoomControl().add_to(m)
     m.get_root().header.add_child(folium.Element("""
     <style>
+        /* ── Hover tooltip: strip Leaflet's default wrapper ── */
+        .leaflet-tooltip:has(.pgis-report-card) {
+            background: transparent !important;
+            border: 0 !important;
+            box-shadow: none !important;
+            padding: 0 !important;
+            border-radius: 0 !important;
+        }
+        .leaflet-tooltip:has(.pgis-report-card)::before {
+            display: none !important;
+        }
+        /* ── Query popup anchor ── */
         .query-risk-div-icon {
             background: transparent !important;
             border: 0 !important;
@@ -1620,12 +1825,11 @@ with col_right:
         if selected_dong != "전체" and report.get("dong") != selected_dong:
             continue
         
-        popup = build_report_popup_html(report)
+        tip_html = build_report_popup_html(report)
         folium.Marker(
             location=[report["lat"], report["lng"]],
-            popup=folium.Popup(popup, max_width=270),
+            tooltip=folium.Tooltip(tip_html, sticky=True),
             icon=folium.Icon(color=type_colors.get(report["type"], "gray"), icon_color="white", icon="info-sign"),
-            tooltip=report["type"],
         ).add_to(m)
     
     # 동 경계
@@ -1786,7 +1990,14 @@ with col_right:
 
 # ========== 하단: 분석 ==========
 st.divider()
-st.markdown("### 📊 상세 분석")
+st.markdown("""
+<div class="pgis-section-head">
+    <div class="pgis-section-title">
+        <div class="pgis-section-title__icon" style="background:#ecfdf5;">📊</div>
+        상세 분석
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
 if st.session_state.reports:
     reports_df = pd.DataFrame(normalize_reports(st.session_state.reports))
@@ -1795,34 +2006,55 @@ if st.session_state.reports:
     else:
         col_chart1, col_chart2 = st.columns(2)
         
+        _chart_layout = dict(
+            height=340,
+            showlegend=False,
+            plot_bgcolor="#ffffff",
+            paper_bgcolor="#ffffff",
+            font=dict(family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", size=12, color="#475569"),
+            margin=dict(l=8, r=8, t=36, b=8),
+            xaxis=dict(showgrid=False, linecolor="#e2e8f0", tickcolor="#e2e8f0"),
+            yaxis=dict(showgrid=True, gridcolor="#f1f5f9", linecolor="#e2e8f0", zeroline=False),
+        )
+
         with col_chart1:
-            # 동별 신고 현황
             dong_reports = reports_df.groupby("dong").size().sort_values(ascending=False)
             fig1 = px.bar(
                 x=dong_reports.index,
                 y=dong_reports.values,
-                labels={"x": "동", "y": "신고 건수"},
+                labels={"x": "행정동", "y": "신고 건수"},
+                title="<b>행정동별 신고 현황</b>",
                 color=dong_reports.values,
-                color_continuous_scale="RdYlGn_r",
+                color_continuous_scale=[[0, "#bfdbfe"], [0.5, "#3b82f6"], [1, "#1d4ed8"]],
             )
-            fig1.update_layout(height=400, showlegend=False)
+            fig1.update_layout(**_chart_layout, title_font_size=13, title_x=0)
+            fig1.update_coloraxes(showscale=False)
+            fig1.update_traces(marker_line_width=0, hovertemplate="%{x}<br>신고 %{y}건<extra></extra>")
             st.plotly_chart(fig1, use_container_width=True)
-        
+
         with col_chart2:
-            # 위험도 분포
             intensity_dist = reports_df["intensity"].value_counts().sort_index()
             fig2 = px.bar(
                 x=intensity_dist.index,
                 y=intensity_dist.values,
-                labels={"x": "위험도", "y": "신고 건수"},
+                labels={"x": "위험도 단계", "y": "신고 건수"},
+                title="<b>위험도 분포</b>",
                 color=intensity_dist.index,
-                color_continuous_scale="Reds",
+                color_continuous_scale=[[0,"#86efac"],[0.25,"#fbbf24"],[0.75,"#f97316"],[1,"#ef4444"]],
             )
-            fig2.update_layout(height=400, showlegend=False)
+            fig2.update_layout(**_chart_layout, title_font_size=13, title_x=0)
+            fig2.update_coloraxes(showscale=False)
+            fig2.update_traces(marker_line_width=0, hovertemplate="위험도 %{x}<br>신고 %{y}건<extra></extra>")
             st.plotly_chart(fig2, use_container_width=True)
 
-# 신고 테이블
-st.markdown("### 📋 업로드 현황")
+st.markdown("""
+<div class="pgis-section-head">
+    <div class="pgis-section-title">
+        <div class="pgis-section-title__icon" style="background:#f0f9ff;">📋</div>
+        업로드 현황
+    </div>
+</div>
+""", unsafe_allow_html=True)
 if st.session_state.reports:
     df_reports = pd.DataFrame(normalize_reports(st.session_state.reports))
     if df_reports.empty or "dong" not in df_reports.columns:
