@@ -35,6 +35,8 @@ MAX_PRIOR_BOOST = 0.22
 RIGHT_CLICK_QUERY_TOKEN = "__RIGHT_CLICK_QUERY__"
 REPORTS_FILE = os.path.join(os.path.dirname(__file__), "reports.json")
 REPORTS_TABLE = "reports"
+REPORT_TABLE_LIMIT = 250
+ST_FOLIUM_SUPPORTS_CONTAINER_WIDTH = "use_container_width" in inspect.signature(st_folium).parameters
 
 # ========== 중구 행정동 데이터 ==========
 JUNGGU_DONGS = {
@@ -988,13 +990,17 @@ def parse_report_datetime(report, today=None):
 
     return None
 
-def filter_reports_by_date(reports, target_date, today=None):
+def split_reports_by_dates(reports, target_dates, today=None):
     today = today or datetime.now().date()
-    return [
-        report for report in reports
-        if (parsed := parse_report_datetime(report, today)) is not None
-        and parsed.date() == target_date
-    ]
+    buckets = {target_date: [] for target_date in target_dates}
+    for report in reports:
+        parsed = parse_report_datetime(report, today)
+        if parsed is None:
+            continue
+        report_date = parsed.date()
+        if report_date in buckets:
+            buckets[report_date].append(report)
+    return buckets
 
 def summarize_reports(reports):
     count = len(reports)
@@ -1018,6 +1024,7 @@ def format_metric_delta(current, previous, unit, decimals=0):
         return f"±0{unit} 전일 대비"
     return f"{diff:+d}{unit} 전일 대비"
 
+@st.cache_data(show_spinner=False)
 def create_grid():
     """주소 기반 격자 생성"""
     grid = []
@@ -1045,6 +1052,22 @@ def create_grid():
     
     return grid
 
+@st.cache_data(show_spinner=False)
+def prepare_report_arrays(reports):
+    normalized = normalize_reports(reports)
+    if not normalized:
+        return {
+            "lat": np.array([], dtype=float),
+            "lng": np.array([], dtype=float),
+            "intensity": np.array([], dtype=float),
+        }
+
+    return {
+        "lat": np.array([report["lat"] for report in normalized], dtype=float),
+        "lng": np.array([report["lng"] for report in normalized], dtype=float),
+        "intensity": np.array([report["intensity"] for report in normalized], dtype=float),
+    }
+
 def get_report_distance_weight(distance_m):
     if distance_m > REPORT_INFLUENCE_RADIUS_M:
         return 0
@@ -1053,20 +1076,55 @@ def get_report_distance_weight(distance_m):
 def get_density_factor(weighted_count):
     return 1 - math.exp(-weighted_count / REPORT_DENSITY_SATURATION)
 
-def calculate_bayesian_stats_for_point(lat, lng, reports, prior=0.1):
-    nearby_count = 0
-    weighted_count = 0
-    weighted_risk = 0
-    
-    for report in reports:
-        distance = haversine_distance(lat, lng, report["lat"], report["lng"])
-        distance_weight = get_report_distance_weight(distance)
-        if distance_weight <= 0:
-            continue
+def _empty_bayesian_stats(prior):
+    likelihood = BACKGROUND_LIKELIHOOD
+    evidence = prior * likelihood + (1 - prior) * FALSE_ALARM_RATE
+    posterior = (prior * likelihood) / evidence if evidence > 0 else prior
+    return {
+        "likelihood": likelihood,
+        "posterior": posterior,
+        "report_count": 0,
+        "weighted_count": 0,
+        "local_risk": 0,
+        "density_factor": 0,
+    }
 
-        nearby_count += 1
-        weighted_count += distance_weight
-        weighted_risk += distance_weight * (report["intensity"] / 5)
+def calculate_bayesian_stats_from_arrays(lat, lng, report_arrays, prior=0.1):
+    report_lats = report_arrays["lat"]
+    if len(report_lats) == 0:
+        return _empty_bayesian_stats(prior)
+
+    lat_window = REPORT_INFLUENCE_RADIUS_M / 111000
+    lon_scale = max(abs(math.cos(math.radians(lat))), 0.01)
+    lon_window = REPORT_INFLUENCE_RADIUS_M / (111000 * lon_scale)
+    report_lngs = report_arrays["lng"]
+    candidate_mask = (
+        (np.abs(report_lats - lat) <= lat_window)
+        & (np.abs(report_lngs - lng) <= lon_window)
+    )
+    if not np.any(candidate_mask):
+        return _empty_bayesian_stats(prior)
+
+    candidate_lats = report_lats[candidate_mask]
+    candidate_lngs = report_lngs[candidate_mask]
+    candidate_intensity = report_arrays["intensity"][candidate_mask]
+
+    phi1 = math.radians(lat)
+    phi2 = np.radians(candidate_lats)
+    dphi = np.radians(candidate_lats - lat)
+    dlambda = np.radians(candidate_lngs - lng)
+    a = np.sin(dphi / 2) ** 2 + math.cos(phi1) * np.cos(phi2) * np.sin(dlambda / 2) ** 2
+    distances = 6371000 * (2 * np.arcsin(np.sqrt(np.clip(a, 0, 1))))
+    within_mask = distances <= REPORT_INFLUENCE_RADIUS_M
+    if not np.any(within_mask):
+        return _empty_bayesian_stats(prior)
+
+    distances = distances[within_mask]
+    intensities = candidate_intensity[within_mask]
+    weights = np.exp(-0.5 * (distances / REPORT_DECAY_DISTANCE_M) ** 2)
+    nearby_count = int(len(weights))
+    weighted_count = float(weights.sum())
+    weighted_risk = float((weights * (intensities / 5)).sum())
 
     if weighted_count > 0:
         local_risk = weighted_risk / weighted_count
@@ -1091,20 +1149,9 @@ def calculate_bayesian_stats_for_point(lat, lng, reports, prior=0.1):
         "density_factor": density_factor,
     }
 
-def bayesian_update(grid, reports):
-    """베이지안 정리 계산"""
-    reports = normalize_reports(reports)
-    updated = []
-    
-    for cell in grid:
-        stats = calculate_bayesian_stats_for_point(cell["lat"], cell["lon"], reports, cell["prior"])
-        
-        updated.append({
-            **cell,
-            **stats,
-        })
-    
-    return updated
+def calculate_bayesian_stats_for_point(lat, lng, reports, prior=0.1):
+    report_arrays = prepare_report_arrays(reports)
+    return calculate_bayesian_stats_from_arrays(lat, lng, report_arrays, prior)
 
 def get_color(value):
     """위험도 색상"""
@@ -1250,16 +1297,6 @@ def build_query_popup_html(lat, lng, dong, stats, reports):
 
 def get_heat_weight(value):
     return max(0.0, min(1.0, (value - 0.08) / 0.42))
-
-def get_zone_radius_m(value, report_count, weighted_count=0):
-    coverage_radius = GRID_SIZE_M * 0.72
-    risk_expansion = GRID_SIZE_M * 0.18 * get_heat_weight(value)
-    density_expansion = min(weighted_count * GRID_SIZE_M * 0.08, GRID_SIZE_M * 0.16)
-    report_expansion = min(report_count, 3) * GRID_SIZE_M * 0.025
-    return coverage_radius + risk_expansion + density_expansion + report_expansion
-
-def get_zone_opacity(value, density_factor=0):
-    return min(0.52, 0.12 + get_heat_weight(value) * 0.24 + density_factor * 0.14)
 
 def get_map_interaction(map_data):
     if not map_data:
@@ -1458,14 +1495,16 @@ class BottomRightZoomControl(MacroElement):
     """)
 
 def render_report_status_table(df_reports, selected_dong):
-    df = df_reports.sort_values("id", ascending=False).copy()
-    total_count = len(df)
-    high_count = int((df["intensity"] >= 4).sum()) if total_count else 0
-    avg_intensity = float(df["intensity"].mean()) if total_count else 0
+    df_all = df_reports.sort_values("id", ascending=False).copy()
+    total_count = len(df_all)
+    high_count = int((df_all["intensity"] >= 4).sum()) if total_count else 0
+    avg_intensity = float(df_all["intensity"].mean()) if total_count else 0
     filter_label = selected_dong if selected_dong != "전체" else "전체 동"
+    df = df_all.head(REPORT_TABLE_LIMIT)
+    visible_count = len(df)
 
     rows = []
-    for _, report in df.iterrows():
+    for report in df.to_dict("records"):
         report_id = coerce_int(report.get("id"), 0)
         intensity = max(1, min(5, coerce_int(report.get("intensity"), 3)))
         risk_label, risk_class = get_risk_display(intensity)
@@ -1511,7 +1550,8 @@ def render_report_status_table(df_reports, selected_dong):
             </div>
             <div class="report-board__meta">
                 <span class="report-pill">필터 {html.escape(str(filter_label))}</span>
-                <span class="report-pill">총 {total_count}건</span>
+                <span class="report-pill">최근 {visible_count}건 표시</span>
+                <span class="report-pill">전체 {total_count}건</span>
                 <span class="report-pill">고위험 {high_count}건</span>
                 <span class="report-pill">평균 {avg_intensity:.1f}/5</span>
             </div>
@@ -1709,7 +1749,7 @@ if normalized_reports != st.session_state.reports:
     save_reports(st.session_state.reports)
 else:
     st.session_state.reports = normalized_reports
-next_report_id = max([r.get("id", 0) for r in st.session_state.reports], default=0) + 1
+next_report_id = max((coerce_int(r.get("id"), 0) for r in st.session_state.reports), default=0) + 1
 if "next_id" not in st.session_state or st.session_state.next_id < next_report_id:
     st.session_state.next_id = next_report_id
 if "grid" not in st.session_state:
@@ -1733,6 +1773,9 @@ if "map_focus" not in st.session_state:
 if "sidebar_open" not in st.session_state:
     st.session_state.sidebar_open = True
 
+reports_all = st.session_state.reports
+reports_df_all = pd.DataFrame(reports_all) if reports_all else pd.DataFrame()
+
 # ========== 메인 헤더 ==========
 st.markdown(f"""
 <div class="pgis-header">
@@ -1746,7 +1789,7 @@ st.markdown(f"""
         <div class="pgis-header__chip">🏘&nbsp;<b>{len(JUNGGU_DONGS)}</b>개 행정동</div>
         <div class="pgis-header__chip">📐&nbsp;<b>{GRID_SIZE_M}m</b> 격자 간격</div>
         <div class="pgis-header__chip">🎯&nbsp;<b>{REPORT_INFLUENCE_RADIUS_M}m</b> 영향 반경</div>
-        <div class="pgis-header__chip">📊&nbsp;<b>{len(st.session_state.reports)}</b>건 누적 신고</div>
+        <div class="pgis-header__chip">📊&nbsp;<b>{len(reports_all)}</b>건 누적 신고</div>
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1754,9 +1797,10 @@ st.markdown(f"""
 # ========== 메트릭 ==========
 today = datetime.now().date()
 yesterday = today - timedelta(days=1)
-today_reports = filter_reports_by_date(st.session_state.reports, today, today)
-yesterday_reports = filter_reports_by_date(st.session_state.reports, yesterday, today)
-overall_stats = summarize_reports(st.session_state.reports)
+report_date_buckets = split_reports_by_dates(reports_all, [today, yesterday], today)
+today_reports = report_date_buckets[today]
+yesterday_reports = report_date_buckets[yesterday]
+overall_stats = summarize_reports(reports_all)
 today_stats = summarize_reports(today_reports)
 yesterday_stats = summarize_reports(yesterday_reports)
 
@@ -1801,7 +1845,12 @@ if st.session_state.sidebar_open:
         """, unsafe_allow_html=True)
 
         # 동 선택
-        selected_dong = st.selectbox("📍 동 선택", ["전체"] + list(JUNGGU_DONGS.keys()))
+        dong_options = ["전체"] + list(JUNGGU_DONGS.keys())
+        selected_dong = st.selectbox(
+            "📍 동 선택",
+            dong_options,
+            index=dong_options.index(selected_dong) if selected_dong in dong_options else 0,
+        )
         st.session_state.selected_dong = selected_dong
 
         st.markdown("---")
@@ -1868,8 +1917,8 @@ if st.session_state.sidebar_open:
         col_a, col_b = st.columns(2)
         with col_a:
             if st.button("⬇️ CSV 다운로드", use_container_width=True):
-                if st.session_state.reports:
-                    df = pd.DataFrame(normalize_reports(st.session_state.reports))
+                if reports_all:
+                    df = reports_df_all.copy()
                     export_columns = ["id", "lat", "lng", "dong", "type", "intensity", "time", "created_at", "desc"]
                     df = df[[col for col in export_columns if col in df.columns]]
                     csv = df.to_csv(index=False, encoding="utf-8-sig")
@@ -1896,7 +1945,7 @@ if st.session_state.sidebar_open:
                     saved_count = 0
                     skipped_count = 0
                     last_uploaded_report = None
-                    for _, row in df.iterrows():
+                    for row in df.to_dict("records"):
                         new_report = build_report_from_csv_row(row, st.session_state.next_id, uploaded_at)
                         if not new_report:
                             skipped_count += 1
@@ -1943,13 +1992,13 @@ with col_right:
     """, unsafe_allow_html=True)
     
     # 베이지안 계산
-    reports_for_map = normalize_reports(st.session_state.reports)
-    bayesian_grid = bayesian_update(st.session_state.grid, reports_for_map)
+    reports_for_map = reports_all
+    report_arrays = prepare_report_arrays(reports_for_map)
     query_lat = st.session_state.query_lat
     query_lng = st.session_state.query_lng
     has_query_location = query_lat is not None and query_lng is not None
     query_stats = (
-        calculate_bayesian_stats_for_point(query_lat, query_lng, reports_for_map)
+        calculate_bayesian_stats_from_arrays(query_lat, query_lng, report_arrays)
         if has_query_location else None
     )
     selected_map_lat = st.session_state.clicked_lat
@@ -2203,21 +2252,6 @@ with col_right:
     </style>
     """))
     
-    # 위험도 레이어
-    visible_cells = [
-        cell for cell in bayesian_grid
-        if selected_dong == "전체" or cell["dong"] == selected_dong
-    ]
-    heat_points = [
-        [
-            cell["lat"],
-            cell["lon"],
-            get_heat_weight(cell["posterior"]) * (0.65 + cell["density_factor"] * 0.35),
-        ]
-        for cell in visible_cells
-        if get_heat_weight(cell["posterior"]) > 0
-    ]
-    
     # 베이지안 분포 — 선택(클릭/우클릭) 시에만 주변 격자 표시
     _active_lat = (
         query_lat if (st.session_state.map_focus == "query" and has_query_location)
@@ -2233,8 +2267,8 @@ with col_right:
         if st.session_state.map_focus == "query" and has_query_location and query_stats:
             _prob_c = query_stats["posterior"]
         else:
-            _prob_c = calculate_bayesian_stats_for_point(
-                _active_lat, _active_lon, reports_for_map
+            _prob_c = calculate_bayesian_stats_from_arrays(
+                _active_lat, _active_lon, report_arrays
             )["posterior"]
         _col_c = get_color(_prob_c)
         _hw_c  = get_heat_weight(_prob_c)
@@ -2321,7 +2355,7 @@ with col_right:
 
     if has_selected_location:
         selected_location_dong = get_dong_by_coords(selected_map_lat, selected_map_lng)
-        _sel_stats = calculate_bayesian_stats_for_point(selected_map_lat, selected_map_lng, reports_for_map)
+        _sel_stats = calculate_bayesian_stats_from_arrays(selected_map_lat, selected_map_lng, report_arrays)
         sel_grade = get_probability_grade(_sel_stats["posterior"])
         selected_popup = f"""
         <div style="font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:2px 0;">
@@ -2405,7 +2439,7 @@ with col_right:
             "last_object_clicked_popup",
         ],
     }
-    if "use_container_width" in inspect.signature(st_folium).parameters:
+    if ST_FOLIUM_SUPPORTS_CONTAINER_WIDTH:
         st_folium_kwargs["use_container_width"] = True
     else:
         st_folium_kwargs["width"] = 1040
@@ -2454,8 +2488,8 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-if st.session_state.reports:
-    reports_df = pd.DataFrame(normalize_reports(st.session_state.reports))
+if reports_all:
+    reports_df = reports_df_all.copy()
     if reports_df.empty or "dong" not in reports_df.columns:
         st.info("분석 가능한 신고 데이터가 없습니다.")
     else:
@@ -2723,7 +2757,7 @@ if st.session_state.reports:
                     .reset_index()
                 )
                 rows_html = ""
-                for rank, (_, row) in enumerate(dong_risk.head(10).iterrows(), start=1):
+                for rank, row in enumerate(dong_risk.head(10).to_dict("records"), start=1):
                     risk_label, risk_color = _avg_risk_display(float(row["avg"]))
                     meter_width = max(6, min(100, float(row["avg"]) / 5 * 100))
                     rows_html += (
@@ -2759,8 +2793,8 @@ st.markdown("""
     </div>
 </div>
 """, unsafe_allow_html=True)
-if st.session_state.reports:
-    df_reports = pd.DataFrame(normalize_reports(st.session_state.reports))
+if reports_all:
+    df_reports = reports_df_all.copy()
     if df_reports.empty or "dong" not in df_reports.columns:
         st.info("표시할 수 있는 신고 데이터가 없습니다.")
     else:
