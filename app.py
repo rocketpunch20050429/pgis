@@ -602,6 +602,45 @@ iframe {
     font-size: 13px;
     font-weight: 600;
 }
+.data-quality-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+    margin: 0 0 12px;
+}
+.data-quality-card {
+    min-width: 0;
+    border: 1px solid var(--pgis-border);
+    border-radius: 10px;
+    background: #fff;
+    padding: 10px 11px;
+}
+.data-quality-label {
+    color: #94a3b8;
+    font-size: 10.5px;
+    font-weight: 800;
+    letter-spacing: .3px;
+    text-transform: uppercase;
+}
+.data-quality-value {
+    margin-top: 5px;
+    color: #0f172a;
+    font-size: 18px;
+    font-weight: 900;
+    line-height: 1;
+}
+.data-quality-sub {
+    margin-top: 5px;
+    color: #64748b;
+    font-size: 11px;
+    font-weight: 650;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.data-quality-card.is-good .data-quality-value { color: #16a34a; }
+.data-quality-card.is-warn .data-quality-value { color: #f97316; }
+.data-quality-card.is-bad .data-quality-value { color: #ef4444; }
 
 /* ── Analysis charts ─────────────────────────────────────────────────── */
 .analysis-summary-row {
@@ -832,6 +871,9 @@ h3 { font-size: 0.9375rem !important; font-weight: 800 !important; color: #0f172
     .analysis-summary-value {
         font-size: 21px;
     }
+    .data-quality-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
     .pgis-section-head,
     .report-board__header {
         align-items: flex-start;
@@ -906,6 +948,10 @@ h3 { font-size: 0.9375rem !important; font-weight: 800 !important; color: #0f172
     }
     [data-testid="stForm"] {
         padding: .875rem !important;
+    }
+    [data-testid="stNumberInput"] input,
+    [data-testid="stTextArea"] textarea {
+        font-size: 16px !important;
     }
     .report-board {
         border-radius: 10px;
@@ -1005,6 +1051,9 @@ h3 { font-size: 0.9375rem !important; font-weight: 800 !important; color: #0f172
         grid-template-columns: 1fr;
     }
     .analysis-summary-row {
+        grid-template-columns: 1fr;
+    }
+    .data-quality-grid {
         grid-template-columns: 1fr;
     }
 }
@@ -1113,6 +1162,79 @@ def report_dedupe_key(report):
         str(report.get("type", "")).strip().casefold(),
         coerce_int(report.get("intensity"), 0),
         str(report.get("desc", "")).strip().casefold(),
+    )
+
+def summarize_report_quality(reports):
+    total_count = len(reports or [])
+    seen_keys = set()
+    duplicate_count = 0
+    missing_coord_count = 0
+    outside_count = 0
+    unknown_dong_count = 0
+    issue_rows = set()
+
+    for index, report in enumerate(reports or []):
+        lat = coerce_float(report.get("lat"), None)
+        lng = coerce_float(report.get("lng", report.get("lon")), None)
+        if lat is None or lng is None:
+            missing_coord_count += 1
+            issue_rows.add(index)
+            continue
+
+        if not is_within_junggu_bounds(lat, lng):
+            outside_count += 1
+            issue_rows.add(index)
+
+        if str(report.get("dong", "")).strip() in ("", "알 수 없음"):
+            unknown_dong_count += 1
+            issue_rows.add(index)
+
+        dedupe_key = report_dedupe_key(report)
+        if dedupe_key in seen_keys:
+            duplicate_count += 1
+            issue_rows.add(index)
+        elif dedupe_key is not None:
+            seen_keys.add(dedupe_key)
+
+    issue_count = len(issue_rows)
+    clean_count = max(0, total_count - issue_count)
+    quality_score = round((clean_count / total_count) * 100) if total_count else 100
+
+    return {
+        "total_count": total_count,
+        "quality_score": quality_score,
+        "duplicate_count": duplicate_count,
+        "missing_coord_count": missing_coord_count,
+        "outside_count": outside_count,
+        "unknown_dong_count": unknown_dong_count,
+        "issue_count": issue_count,
+    }
+
+def render_data_quality_summary(stats):
+    issue_count = stats["issue_count"]
+    quality_score = stats["quality_score"]
+    quality_class = "is-good" if quality_score >= 95 else "is-warn" if quality_score >= 80 else "is-bad"
+    issue_class = "is-good" if issue_count == 0 else "is-warn"
+    duplicate_class = "is-good" if stats["duplicate_count"] == 0 else "is-warn"
+    outside_class = "is-good" if stats["outside_count"] == 0 else "is-bad"
+    cards = [
+        ("전체 신고", f'{stats["total_count"]:,}건', "현재 저장 기준", ""),
+        ("데이터 품질", f"{quality_score}%", "중복·누락·범위 기준", quality_class),
+        ("중복 의심", f'{stats["duplicate_count"]:,}건', "좌표·유형·강도·설명", duplicate_class),
+        ("검토 필요", f"{issue_count:,}건", f'범위 밖 {stats["outside_count"]:,} · 좌표 누락 {stats["missing_coord_count"]:,}', issue_class if stats["outside_count"] == 0 else outside_class),
+    ]
+
+    return (
+        '<div class="data-quality-grid">'
+        + "".join(
+            f'<div class="data-quality-card {card_class}">'
+            f'<div class="data-quality-label">{html.escape(label)}</div>'
+            f'<div class="data-quality-value">{html.escape(value)}</div>'
+            f'<div class="data-quality-sub">{html.escape(sub)}</div>'
+            f'</div>'
+            for label, value, sub, card_class in cards
+        )
+        + '</div>'
     )
 
 def normalize_report(report):
@@ -1951,6 +2073,22 @@ def save_reports(reports):
         st.error(f"저장 오류: {e}")
         return False
 
+def show_session_feedback(key):
+    feedback = st.session_state.get(key)
+    if not feedback:
+        return
+
+    feedback_type, feedback_message = feedback
+    if feedback_type == "success":
+        st.success(feedback_message)
+    elif feedback_type == "warning":
+        st.warning(feedback_message)
+    elif feedback_type == "error":
+        st.error(feedback_message)
+    else:
+        st.info(feedback_message)
+    st.session_state[key] = None
+
 # ========== 세션 상태 ==========
 if "reports" not in st.session_state:
     st.session_state.reports = load_reports()
@@ -1985,6 +2123,10 @@ if "sidebar_open" not in st.session_state:
     st.session_state.sidebar_open = True
 if "show_upload" not in st.session_state:
     st.session_state.show_upload = False
+if "report_feedback" not in st.session_state:
+    st.session_state.report_feedback = None
+if "upload_feedback" not in st.session_state:
+    st.session_state.upload_feedback = None
 
 reports_all = st.session_state.reports
 reports_df_all = pd.DataFrame(reports_all) if reports_all else pd.DataFrame()
@@ -2032,6 +2174,8 @@ if st.session_state.map_click_msg:
         <span>위치 선택 완료 &nbsp;—&nbsp; 위도 <b>{st.session_state.clicked_lat:.5f}</b> / 경도 <b>{st.session_state.clicked_lng:.5f}</b></span>
     </div>
     """, unsafe_allow_html=True)
+
+show_session_feedback("report_feedback")
 
 # ========== 메인 레이아웃 ==========
 selected_dong = st.session_state.get("selected_dong", "전체")
@@ -2178,30 +2322,34 @@ if st.session_state.sidebar_open:
                         "desc": desc,
                         "dong": dong,
                     }
-                    saved_report = persist_report(new_report)
-                    if saved_report:
-                        st.session_state.reports.append(saved_report)
-                        st.session_state.next_id = max(st.session_state.next_id, saved_report["id"] + 1)
-                        save_reports(st.session_state.reports)
-                        st.session_state.clicked_lat = None
-                        st.session_state.clicked_lng = None
-                        st.session_state.location_input_version += 1
-                        st.session_state.map_click_msg = False
-                        st.success(f"✅ 신고 저장 | {dong}")
-                        st.rerun()
+                    dedupe_key = report_dedupe_key(new_report)
+                    existing_keys = {
+                        key for key in (report_dedupe_key(report) for report in st.session_state.reports)
+                        if key is not None
+                    }
+                    if dedupe_key in existing_keys:
+                        st.warning("이미 같은 위치·유형·강도·설명의 신고가 등록되어 있습니다.")
+                    else:
+                        saved_report = persist_report(new_report)
+                        if saved_report:
+                            st.session_state.reports.append(saved_report)
+                            st.session_state.next_id = max(st.session_state.next_id, saved_report["id"] + 1)
+                            save_reports(st.session_state.reports)
+                            st.session_state.clicked_lat = None
+                            st.session_state.clicked_lng = None
+                            st.session_state.location_input_version += 1
+                            st.session_state.map_click_msg = False
+                            st.session_state.report_feedback = ("success", f"✅ 신고 저장 완료 | {dong}")
+                            st.rerun()
 
-        upload_feedback = st.session_state.get("upload_feedback")
-        if upload_feedback:
-            feedback_type, feedback_message = upload_feedback
-            if feedback_type == "success":
-                st.success(feedback_message)
-            elif feedback_type == "warning":
-                st.warning(feedback_message)
-            else:
-                st.info(feedback_message)
-            st.session_state.upload_feedback = None
+        show_session_feedback("upload_feedback")
 
         with st.expander("데이터 관리", expanded=False):
+            data_quality = summarize_report_quality(reports_all)
+            st.markdown(render_data_quality_summary(data_quality), unsafe_allow_html=True)
+            if data_quality["issue_count"]:
+                st.caption("검토 필요 항목은 중복 의심, 좌표 누락, 중구 범위 밖, 행정동 미확정 데이터를 포함합니다.")
+
             col_a, col_b = st.columns(2)
             with col_a:
                 if st.button("CSV 다운로드", use_container_width=True):
