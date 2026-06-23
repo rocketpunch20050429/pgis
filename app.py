@@ -1877,7 +1877,8 @@ def load_reports():
             with open(REPORTS_FILE, "r", encoding="utf-8") as f:
                 st.session_state.storage_backend = "reports.json"
                 return json.load(f)
-        except:
+        except Exception as e:
+            st.warning(f"reports.json을 읽지 못해 빈 데이터로 시작합니다: {e}")
             return []
     st.session_state.storage_backend = "reports.json"
     return []
@@ -1926,6 +1927,8 @@ if "map_focus" not in st.session_state:
     st.session_state.map_focus = "register"
 if "sidebar_open" not in st.session_state:
     st.session_state.sidebar_open = True
+if "show_upload" not in st.session_state:
+    st.session_state.show_upload = False
 
 reports_all = st.session_state.reports
 reports_df_all = pd.DataFrame(reports_all) if reports_all else pd.DataFrame()
@@ -1976,6 +1979,10 @@ if st.session_state.map_click_msg:
 
 # ========== 메인 레이아웃 ==========
 selected_dong = st.session_state.get("selected_dong", "전체")
+dong_options = ["전체"] + list(JUNGGU_DONGS.keys())
+if selected_dong not in dong_options:
+    st.session_state.selected_dong = "전체"
+    selected_dong = "전체"
 
 if st.session_state.map_focus == "query" and st.session_state.query_lat is not None and st.session_state.query_lng is not None:
     workflow_title = "확률 조회 모드"
@@ -2002,9 +2009,27 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-if st.button("신고 폼 접기" if st.session_state.sidebar_open else "신고 폼 열기", key="toggle_report_form"):
-    st.session_state.sidebar_open = not st.session_state.sidebar_open
-    st.rerun()
+action_col1, action_col2, action_col3 = st.columns([1, 1, 4], gap="small")
+with action_col1:
+    if st.button("신고 폼 접기" if st.session_state.sidebar_open else "신고 폼 열기", key="toggle_report_form", use_container_width=True):
+        st.session_state.sidebar_open = not st.session_state.sidebar_open
+        st.rerun()
+with action_col2:
+    has_active_map_state = (
+        st.session_state.clicked_lat is not None
+        or st.session_state.clicked_lng is not None
+        or st.session_state.query_lat is not None
+        or st.session_state.query_lng is not None
+    )
+    if st.button("선택 초기화", key="clear_map_selection", use_container_width=True, disabled=not has_active_map_state):
+        st.session_state.clicked_lat = None
+        st.session_state.clicked_lng = None
+        st.session_state.query_lat = None
+        st.session_state.query_lng = None
+        st.session_state.map_click_msg = False
+        st.session_state.map_focus = "register"
+        st.session_state.location_input_version += 1
+        st.rerun()
 
 if st.session_state.sidebar_open:
     col_left, col_right = st.columns([0.9, 3.4], gap="medium")
@@ -2024,13 +2049,11 @@ if st.session_state.sidebar_open:
         """, unsafe_allow_html=True)
 
         # 동 선택
-        dong_options = ["전체"] + list(JUNGGU_DONGS.keys())
         selected_dong = st.selectbox(
             "📍 동 선택",
             dong_options,
-            index=dong_options.index(selected_dong) if selected_dong in dong_options else 0,
+            key="selected_dong",
         )
-        st.session_state.selected_dong = selected_dong
 
         st.markdown("---")
 
@@ -2053,7 +2076,9 @@ if st.session_state.sidebar_open:
 
             desc = st.text_area("상세 설명", max_chars=100, placeholder="예: 횡단보도 직전 조명 전부 고장...")
 
-            if st.session_state.clicked_lat is not None and st.session_state.clicked_lng is not None:
+            if selected_report_dong == "알 수 없음":
+                st.warning("선택한 좌표가 등록된 중구 행정동 범위 밖입니다.")
+            elif st.session_state.clicked_lat is not None and st.session_state.clicked_lng is not None:
                 st.success(f"✅ 지도에서 선택된 위치 · {selected_report_dong}")
                 st.caption(f"위도 {lat:.6f} / 경도 {lng:.6f}")
             else:
@@ -2061,29 +2086,32 @@ if st.session_state.sidebar_open:
 
             if st.form_submit_button("📌 신고 등록", use_container_width=True):
                 dong = get_dong_by_coords(lat, lng)
-                created_at = datetime.now()
-                new_report = {
-                    "id": st.session_state.next_id,
-                    "lng": lng,
-                    "lat": lat,
-                    "type": report_type,
-                    "intensity": intensity,
-                    "time": created_at.strftime("%m-%d %H:%M"),
-                    "created_at": created_at.isoformat(timespec="minutes"),
-                    "desc": desc,
-                    "dong": dong,
-                }
-                saved_report = persist_report(new_report)
-                if saved_report:
-                    st.session_state.reports.append(saved_report)
-                    st.session_state.next_id = max(st.session_state.next_id, saved_report["id"] + 1)
-                    save_reports(st.session_state.reports)
-                    st.session_state.clicked_lat = None
-                    st.session_state.clicked_lng = None
-                    st.session_state.location_input_version += 1
-                    st.session_state.map_click_msg = False
-                    st.success(f"✅ 신고 저장 | {dong}")
-                    st.rerun()
+                if dong == "알 수 없음":
+                    st.error("서울 중구 행정동 범위 안의 위치를 선택하거나 위도/경도를 조정해주세요.")
+                else:
+                    created_at = datetime.now()
+                    new_report = {
+                        "id": st.session_state.next_id,
+                        "lng": lng,
+                        "lat": lat,
+                        "type": report_type,
+                        "intensity": intensity,
+                        "time": created_at.strftime("%m-%d %H:%M"),
+                        "created_at": created_at.isoformat(timespec="minutes"),
+                        "desc": desc,
+                        "dong": dong,
+                    }
+                    saved_report = persist_report(new_report)
+                    if saved_report:
+                        st.session_state.reports.append(saved_report)
+                        st.session_state.next_id = max(st.session_state.next_id, saved_report["id"] + 1)
+                        save_reports(st.session_state.reports)
+                        st.session_state.clicked_lat = None
+                        st.session_state.clicked_lng = None
+                        st.session_state.location_input_version += 1
+                        st.session_state.map_click_msg = False
+                        st.success(f"✅ 신고 저장 | {dong}")
+                        st.rerun()
 
         with st.expander("데이터 관리", expanded=False):
             col_a, col_b = st.columns(2)
