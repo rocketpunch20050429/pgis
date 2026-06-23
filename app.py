@@ -643,6 +643,47 @@ iframe {
 .data-quality-card.is-bad .data-quality-value { color: #ef4444; }
 
 /* ── Analysis charts ─────────────────────────────────────────────────── */
+.analysis-brief-row {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    margin: 0 0 14px;
+}
+.analysis-brief-card {
+    min-width: 0;
+    border: 1px solid var(--pgis-border);
+    border-radius: 12px;
+    background: linear-gradient(180deg, #fff 0%, #f8fafc 100%);
+    padding: 13px 14px;
+    box-shadow: var(--pgis-shadow-sm);
+}
+.analysis-brief-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: #64748b;
+    font-size: 11px;
+    font-weight: 850;
+    letter-spacing: .3px;
+    text-transform: uppercase;
+}
+.analysis-brief-value {
+    margin-top: 7px;
+    color: #0f172a;
+    font-size: 18px;
+    font-weight: 900;
+    line-height: 1.18;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.analysis-brief-sub {
+    margin-top: 6px;
+    color: #64748b;
+    font-size: 11.5px;
+    font-weight: 650;
+    line-height: 1.45;
+}
 .analysis-summary-row {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -874,6 +915,9 @@ h3 { font-size: 0.9375rem !important; font-weight: 800 !important; color: #0f172
     .data-quality-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
+    .analysis-brief-row {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
     .pgis-section-head,
     .report-board__header {
         align-items: flex-start;
@@ -940,6 +984,10 @@ h3 { font-size: 0.9375rem !important; font-weight: 800 !important; color: #0f172
     }
     .analysis-summary-value,
     .analysis-summary-sub {
+        white-space: normal;
+        word-break: keep-all;
+    }
+    .analysis-brief-value {
         white-space: normal;
         word-break: keep-all;
     }
@@ -1054,6 +1102,9 @@ h3 { font-size: 0.9375rem !important; font-weight: 800 !important; color: #0f172
         grid-template-columns: 1fr;
     }
     .data-quality-grid {
+        grid-template-columns: 1fr;
+    }
+    .analysis-brief-row {
         grid-template-columns: 1fr;
     }
 }
@@ -2999,6 +3050,14 @@ if reports_all:
                 .fillna("기타")
                 .replace("", "기타")
             )
+            parsed_datetimes = []
+            for report in analysis_df.to_dict("records"):
+                parsed = parse_report_datetime(report, today)
+                if parsed is not None and parsed.tzinfo is not None:
+                    parsed = parsed.astimezone().replace(tzinfo=None)
+                parsed_datetimes.append(parsed)
+            analysis_df["parsed_at"] = pd.to_datetime(parsed_datetimes, errors="coerce")
+            dated_analysis_df = analysis_df.dropna(subset=["parsed_at"]).copy()
 
             analysis_scope = selected_dong if selected_dong != "전체" else "전체 동"
             analysis_count = len(analysis_df)
@@ -3024,6 +3083,51 @@ if reports_all:
             )
             top_dong = str(dong_stats.iloc[0]["dong"]) if not dong_stats.empty else "-"
             top_dong_count = int(dong_stats.iloc[0]["count"]) if not dong_stats.empty else 0
+            dong_risk = (
+                analysis_df.groupby("dong")
+                .agg(
+                    count=("intensity", "count"),
+                    avg=("intensity", "mean"),
+                    high_count=("intensity", lambda s: int((s >= 4).sum())),
+                )
+                .sort_values(["avg", "count"], ascending=False)
+                .reset_index()
+            )
+            top_watch_row = dong_risk.iloc[0] if not dong_risk.empty else None
+
+            if not dated_analysis_df.empty:
+                dated_analysis_df["report_date"] = dated_analysis_df["parsed_at"].dt.date
+                dated_analysis_df["report_hour"] = dated_analysis_df["parsed_at"].dt.hour
+                latest_date = dated_analysis_df["report_date"].max()
+                recent_start = latest_date - timedelta(days=6)
+                previous_start = latest_date - timedelta(days=13)
+                recent_df = dated_analysis_df[dated_analysis_df["report_date"] >= recent_start]
+                previous_df = dated_analysis_df[
+                    (dated_analysis_df["report_date"] >= previous_start)
+                    & (dated_analysis_df["report_date"] < recent_start)
+                ]
+                recent_count = len(recent_df)
+                previous_count = len(previous_df)
+                trend_delta = recent_count - previous_count
+                if trend_delta > 0:
+                    trend_label = f"최근 7일 +{trend_delta:,}건"
+                    trend_color = "#ef4444"
+                elif trend_delta < 0:
+                    trend_label = f"최근 7일 {trend_delta:,}건"
+                    trend_color = "#16a34a"
+                else:
+                    trend_label = "최근 7일 변동 없음"
+                    trend_color = "#64748b"
+                peak_hour = int(dated_analysis_df["report_hour"].mode().iloc[0])
+                peak_hour_label = f"{peak_hour:02d}:00대"
+                latest_high_count = int((recent_df["intensity"] >= 4).sum())
+            else:
+                recent_count = 0
+                previous_count = 0
+                trend_label = "날짜 데이터 부족"
+                trend_color = "#64748b"
+                peak_hour_label = "집계 불가"
+                latest_high_count = 0
 
             def _analysis_color(avg):
                 if avg >= 4.0:
@@ -3068,6 +3172,47 @@ if reports_all:
                 "modeBarButtonsToRemove": ["lasso2d", "select2d"],
             }
 
+            watch_value = str(top_watch_row["dong"]) if top_watch_row is not None else top_dong
+            watch_sub = (
+                f'평균 {float(top_watch_row["avg"]):.1f}/5 · 고위험 {int(top_watch_row["high_count"]):,}건'
+                if top_watch_row is not None else "분석 데이터 부족"
+            )
+            briefing_cards = [
+                {
+                    "label": "우선 확인",
+                    "value": watch_value,
+                    "sub": watch_sub,
+                    "color": _analysis_color(float(top_watch_row["avg"])) if top_watch_row is not None else "#64748b",
+                },
+                {
+                    "label": "최근 흐름",
+                    "value": trend_label,
+                    "sub": f"최근 7일 {recent_count:,}건 · 이전 7일 {previous_count:,}건",
+                    "color": trend_color,
+                },
+                {
+                    "label": "집중 시간",
+                    "value": peak_hour_label,
+                    "sub": f"최근 고위험 {latest_high_count:,}건",
+                    "color": "#8b5cf6",
+                },
+                {
+                    "label": "대응 유형",
+                    "value": top_type,
+                    "sub": f"{top_type_count:,}건 · 지도 마커 색상과 동일",
+                    "color": _REPORT_TYPE_THEMES.get(top_type, _REPORT_TYPE_THEMES["기타"])["accent"],
+                },
+            ]
+            briefing_html = "".join(
+                f'<div class="analysis-brief-card" style="border-top:3px solid {card["color"]};">'
+                f'<div class="analysis-brief-label"><span style="color:{card["color"]};">●</span>{html.escape(card["label"])}</div>'
+                f'<div class="analysis-brief-value" title="{html.escape(str(card["value"]))}">{html.escape(str(card["value"]))}</div>'
+                f'<div class="analysis-brief-sub">{html.escape(card["sub"])}</div>'
+                f'</div>'
+                for card in briefing_cards
+            )
+            st.markdown(f'<div class="analysis-brief-row">{briefing_html}</div>', unsafe_allow_html=True)
+
             summary_cards = [
                 {
                     "label": "분석 범위",
@@ -3104,9 +3249,129 @@ if reports_all:
             )
             st.markdown(f'<div class="analysis-summary-row">{summary_html}</div>', unsafe_allow_html=True)
 
-            tab_dong, tab_intensity, tab_type, tab_watch = st.tabs(
-                ["행정동 순위", "위험도 분포", "신고 유형", "주의 지역"]
+            tab_trend, tab_dong, tab_intensity, tab_type, tab_watch = st.tabs(
+                ["추세", "행정동 순위", "위험도 분포", "신고 유형", "주의 지역"]
             )
+
+            with tab_trend:
+                st.markdown(
+                    '<div class="analysis-tip">최근 흐름을 먼저 보고, 신고가 늘어난 기간과 집중 시간대를 함께 확인합니다.</div>',
+                    unsafe_allow_html=True,
+                )
+                if dated_analysis_df.empty:
+                    st.info("추세를 계산할 수 있는 날짜 데이터가 부족합니다.")
+                else:
+                    daily_trend = (
+                        dated_analysis_df.groupby("report_date")
+                        .agg(
+                            count=("intensity", "count"),
+                            avg_intensity=("intensity", "mean"),
+                            high_count=("intensity", lambda s: int((s >= 4).sum())),
+                        )
+                    )
+                    daily_trend.index = pd.to_datetime(daily_trend.index)
+                    trend_end = pd.to_datetime(latest_date)
+                    trend_start = max(daily_trend.index.min(), trend_end - pd.Timedelta(days=29))
+                    trend_index = pd.date_range(trend_start, trend_end, freq="D")
+                    daily_trend = daily_trend.reindex(trend_index)
+                    daily_trend["count"] = daily_trend["count"].fillna(0).astype(int)
+                    daily_trend["high_count"] = daily_trend["high_count"].fillna(0).astype(int)
+                    daily_trend["avg_intensity"] = daily_trend["avg_intensity"].fillna(0)
+                    daily_trend["label"] = daily_trend.index.strftime("%m-%d")
+
+                    fig_trend = go.Figure()
+                    fig_trend.add_trace(go.Bar(
+                        x=daily_trend["label"],
+                        y=daily_trend["count"],
+                        name="신고 건수",
+                        marker_color="#93c5fd",
+                        marker_line_width=0,
+                        customdata=daily_trend["high_count"],
+                        hovertemplate="<b>%{x}</b><br>신고 %{y:,}건<br>고위험 %{customdata:,}건<extra></extra>",
+                    ))
+                    fig_trend.add_trace(go.Scatter(
+                        x=daily_trend["label"],
+                        y=daily_trend["avg_intensity"],
+                        name="평균 위험도",
+                        mode="lines+markers",
+                        yaxis="y2",
+                        line=dict(color="#ef4444", width=3, shape="spline"),
+                        marker=dict(size=6, color="#ef4444"),
+                        hovertemplate="<b>%{x}</b><br>평균 위험도 %{y:.1f}/5<extra></extra>",
+                    ))
+                    trend_layout = _chart_layout(
+                        f"<b>{html.escape(analysis_scope)} 최근 신고 추세</b>",
+                        height=430,
+                        bottom_margin=46,
+                    )
+                    trend_layout.update(
+                        showlegend=True,
+                        legend=dict(
+                            orientation="h",
+                            yanchor="bottom",
+                            y=1.02,
+                            xanchor="right",
+                            x=1,
+                            font_size=11,
+                        ),
+                        yaxis=dict(
+                            title_text="신고 건수",
+                            showgrid=True,
+                            gridcolor="#f1f5f9",
+                            zeroline=False,
+                            linecolor="#e2e8f0",
+                        ),
+                        yaxis2=dict(
+                            title_text="평균 위험도",
+                            overlaying="y",
+                            side="right",
+                            range=[0, 5.2],
+                            showgrid=False,
+                            zeroline=False,
+                            linecolor="#e2e8f0",
+                        ),
+                    )
+                    fig_trend.update_layout(**trend_layout)
+                    fig_trend.update_xaxes(title_text="날짜", tickangle=-35, linecolor="#e2e8f0")
+                    st.plotly_chart(fig_trend, use_container_width=True, config=_plotly_config)
+
+                    hour_counts = (
+                        dated_analysis_df["report_hour"]
+                        .value_counts()
+                        .reindex(range(24), fill_value=0)
+                        .sort_index()
+                    )
+                    hour_labels = [f"{hour:02d}시" for hour in hour_counts.index]
+                    hour_colors = [
+                        "#ef4444" if hour == peak_hour else "#cbd5e1"
+                        for hour in hour_counts.index
+                    ]
+                    fig_hour = go.Figure(go.Bar(
+                        x=hour_labels,
+                        y=hour_counts.values,
+                        marker_color=hour_colors,
+                        marker_line_width=0,
+                        text=[f"{int(v):,}" if v > 0 else "" for v in hour_counts.values],
+                        textposition="outside",
+                        cliponaxis=False,
+                        hovertemplate="<b>%{x}</b><br>신고 %{y:,}건<extra></extra>",
+                    ))
+                    fig_hour.update_layout(
+                        **_chart_layout(
+                            f"<b>{html.escape(analysis_scope)} 시간대별 신고 집중도</b>",
+                            height=360,
+                            bottom_margin=42,
+                        )
+                    )
+                    fig_hour.update_xaxes(title_text="시간대", tickangle=-35, linecolor="#e2e8f0")
+                    fig_hour.update_yaxes(
+                        title_text="신고 건수",
+                        showgrid=True,
+                        gridcolor="#f1f5f9",
+                        zeroline=False,
+                        linecolor="#e2e8f0",
+                    )
+                    st.plotly_chart(fig_hour, use_container_width=True, config=_plotly_config)
 
             with tab_dong:
                 st.markdown(
@@ -3234,16 +3499,6 @@ if reports_all:
                 st.markdown(
                     '<div class="analysis-tip">평균 위험도와 신고 건수를 함께 보고 우선 확인할 지역을 고릅니다.</div>',
                     unsafe_allow_html=True,
-                )
-                dong_risk = (
-                    analysis_df.groupby("dong")
-                    .agg(
-                        count=("intensity", "count"),
-                        avg=("intensity", "mean"),
-                        high_count=("intensity", lambda s: int((s >= 4).sum())),
-                    )
-                    .sort_values(["avg", "count"], ascending=False)
-                    .reset_index()
                 )
                 rows_html = ""
                 for rank, row in enumerate(dong_risk.head(10).to_dict("records"), start=1):
