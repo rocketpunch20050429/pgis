@@ -98,11 +98,28 @@ CUSTOM_CSS = """
 /* ── Global ──────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; }
 
-.stApp { background: #f0f4f8 !important; }
+:root {
+    --pgis-bg: #f3f6fa;
+    --pgis-surface: #ffffff;
+    --pgis-border: #dbe4ef;
+    --pgis-text: #0f172a;
+    --pgis-muted: #64748b;
+    --pgis-soft: #f8fafc;
+    --pgis-primary: #2563eb;
+    --pgis-primary-dark: #1d4ed8;
+    --pgis-shadow-sm: 0 1px 3px rgba(15,23,42,.06);
+    --pgis-shadow-md: 0 10px 30px rgba(15,23,42,.10);
+}
+
+.stApp {
+    background:
+        linear-gradient(180deg, #eef4fb 0%, var(--pgis-bg) 260px, var(--pgis-bg) 100%) !important;
+    color: var(--pgis-text) !important;
+}
 .main .block-container {
     width: 100%;
-    padding: 1.5rem 2rem 4rem !important;
-    max-width: 1720px !important;
+    padding: 1.25rem 1.5rem 3rem !important;
+    max-width: 1540px !important;
 }
 [data-testid="stHorizontalBlock"],
 [data-testid="column"],
@@ -115,16 +132,22 @@ iframe {
     width: 100% !important;
     max-width: 100% !important;
 }
+.element-container:has(.pgis-command-strip),
+.element-container:has(.pgis-header),
+.element-container:has(.pgis-kpi-row),
+.element-container:has(.analysis-summary-row) {
+    margin-bottom: 0 !important;
+}
 
 /* ── Header ──────────────────────────────────────────────────────────── */
 .pgis-header {
     position: relative;
     overflow: hidden;
     background: #0f172a;
-    border-radius: 16px;
-    padding: 26px 32px 22px;
-    margin-bottom: 18px;
-    box-shadow: 0 24px 48px rgba(15,23,42,.22), inset 0 1px 0 rgba(255,255,255,.05);
+    border-radius: 14px;
+    padding: 22px 26px 20px;
+    margin-bottom: 14px;
+    box-shadow: 0 18px 42px rgba(15,23,42,.18), inset 0 1px 0 rgba(255,255,255,.05);
 }
 .pgis-header::after {
     content: '';
@@ -146,7 +169,7 @@ iframe {
     font-size: 10.5px;
     font-weight: 700;
     color: #93c5fd;
-    letter-spacing: .5px;
+    letter-spacing: .06em;
     text-transform: uppercase;
     margin-bottom: 9px;
 }
@@ -156,7 +179,7 @@ iframe {
     font-weight: 900 !important;
     color: #f8fafc !important;
     line-height: 1.15 !important;
-    letter-spacing: -.5px !important;
+    letter-spacing: 0 !important;
 }
 .pgis-header p {
     margin: 6px 0 0 !important;
@@ -177,6 +200,7 @@ iframe {
     background: rgba(255,255,255,.07);
     border: 1px solid rgba(255,255,255,.1);
     border-radius: 8px;
+    min-height: 28px;
     padding: 4px 10px;
     font-size: 11.5px;
     font-weight: 600;
@@ -201,21 +225,21 @@ iframe {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(158px, 1fr));
     gap: 10px;
-    margin-bottom: 18px;
+    margin-bottom: 14px;
 }
 .pgis-kpi {
     position: relative;
     overflow: hidden;
     background: #fff;
-    border-radius: 12px;
-    padding: 16px 18px 14px;
-    border: 1px solid #e2e8f0;
-    box-shadow: 0 1px 3px rgba(15,23,42,.05);
+    border-radius: 10px;
+    padding: 15px 16px 13px;
+    border: 1px solid var(--pgis-border);
+    box-shadow: var(--pgis-shadow-sm);
     transition: box-shadow .2s, transform .2s;
     cursor: default;
 }
 .pgis-kpi:hover {
-    box-shadow: 0 8px 24px rgba(15,23,42,.09);
+    box-shadow: var(--pgis-shadow-md);
     transform: translateY(-2px);
 }
 .pgis-kpi__topbar {
@@ -275,6 +299,62 @@ iframe {
     margin-bottom: 16px;
 }
 
+/* ── Workflow strip ──────────────────────────────────────────────────── */
+.pgis-command-strip {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 12px;
+    align-items: center;
+    margin: 0 0 12px;
+    padding: 12px 14px;
+    background: rgba(255,255,255,.88);
+    border: 1px solid var(--pgis-border);
+    border-radius: 12px;
+    box-shadow: var(--pgis-shadow-sm);
+}
+.pgis-command-strip__main { min-width: 0; }
+.pgis-command-strip__title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--pgis-text);
+    font-size: 13.5px;
+    font-weight: 850;
+}
+.pgis-command-strip__sub {
+    margin-top: 4px;
+    color: var(--pgis-muted);
+    font-size: 12px;
+    font-weight: 650;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.pgis-command-strip__meta {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 6px;
+}
+.pgis-state-chip {
+    display: inline-flex;
+    align-items: center;
+    min-height: 28px;
+    padding: 4px 10px;
+    border: 1px solid var(--pgis-border);
+    border-radius: 999px;
+    background: #fff;
+    color: #475569;
+    font-size: 11.5px;
+    font-weight: 750;
+    white-space: nowrap;
+}
+.pgis-state-chip--active {
+    border-color: rgba(37,99,235,.28);
+    background: #eff6ff;
+    color: #1d4ed8;
+}
+
 /* ── Section heading ─────────────────────────────────────────────────── */
 .pgis-section-head {
     display: flex;
@@ -291,7 +371,7 @@ iframe {
     font-size: 14px;
     font-weight: 800;
     color: #0f172a;
-    letter-spacing: -.2px;
+    letter-spacing: 0;
 }
 .pgis-section-title__icon {
     width: 28px; height: 28px;
@@ -311,6 +391,7 @@ iframe {
     background: #f8fafc;
     border: 1px solid #e2e8f0;
     border-radius: 999px;
+    min-height: 30px;
     padding: 4px 11px;
     font-size: 11px;
     font-weight: 600;
@@ -326,6 +407,7 @@ iframe {
     border-radius: 9px !important;
     font-weight: 700 !important;
     font-size: 12.5px !important;
+    min-height: 42px !important;
     padding: 0.6rem 1.2rem !important;
     transition: background .18s, box-shadow .18s, transform .15s !important;
     letter-spacing: .1px !important;
@@ -336,6 +418,12 @@ iframe {
     transform: translateY(-1px) !important;
 }
 .stButton > button:active { transform: translateY(0) !important; }
+.stButton > button:focus-visible,
+.stDownloadButton > button:focus-visible,
+[data-testid="stFormSubmitButton"] > button:focus-visible {
+    outline: 3px solid rgba(37,99,235,.24) !important;
+    outline-offset: 2px !important;
+}
 
 [data-testid="stFormSubmitButton"] > button {
     background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%) !important;
@@ -361,19 +449,52 @@ iframe {
 /* ── Form ────────────────────────────────────────────────────────────── */
 [data-testid="stForm"] {
     background: #fff !important;
-    border: 1px solid #e2e8f0 !important;
+    border: 1px solid var(--pgis-border) !important;
     border-radius: 12px !important;
-    box-shadow: 0 1px 3px rgba(15,23,42,.05) !important;
-    padding: 1.1rem !important;
+    box-shadow: var(--pgis-shadow-sm) !important;
+    padding: 1rem !important;
+}
+[data-testid="stForm"] label,
+[data-testid="stSelectbox"] label,
+[data-testid="stNumberInput"] label,
+[data-testid="stTextArea"] label,
+[data-testid="stSlider"] label,
+[data-testid="stFileUploader"] label {
+    color: #334155 !important;
+    font-size: 12px !important;
+    font-weight: 800 !important;
+}
+[data-baseweb="select"] > div,
+[data-testid="stNumberInput"] input,
+[data-testid="stTextArea"] textarea,
+[data-testid="stFileUploader"] section {
+    border-color: var(--pgis-border) !important;
+    border-radius: 9px !important;
+}
+[data-baseweb="select"] > div:focus-within,
+[data-testid="stNumberInput"] input:focus,
+[data-testid="stTextArea"] textarea:focus {
+    border-color: var(--pgis-primary) !important;
+    box-shadow: 0 0 0 3px rgba(37,99,235,.12) !important;
+}
+[data-testid="stExpander"] {
+    border: 1px solid var(--pgis-border) !important;
+    border-radius: 12px !important;
+    background: #fff !important;
+    box-shadow: var(--pgis-shadow-sm) !important;
+}
+[data-testid="stExpander"] details summary {
+    color: var(--pgis-text) !important;
+    font-weight: 850 !important;
 }
 
 /* ── Report board ────────────────────────────────────────────────────── */
 .report-board {
     background: #fff;
-    border: 1px solid #e2e8f0;
+    border: 1px solid var(--pgis-border);
     border-radius: 12px;
     overflow: hidden;
-    box-shadow: 0 1px 3px rgba(15,23,42,.05);
+    box-shadow: var(--pgis-shadow-sm);
 }
 .report-board__header {
     display: flex;
@@ -381,8 +502,8 @@ iframe {
     gap: 1rem;
     align-items: flex-end;
     padding: 14px 18px;
-    border-bottom: 1px solid #e2e8f0;
-    background: #f8fafc;
+    border-bottom: 1px solid var(--pgis-border);
+    background: linear-gradient(180deg, #fff 0%, #f8fafc 100%);
 }
 .report-board__title {
     color: #0f172a;
@@ -489,10 +610,15 @@ iframe {
 }
 .analysis-summary-card {
     background: #fff;
-    border: 1px solid #e2e8f0;
+    border: 1px solid var(--pgis-border);
     border-radius: 12px;
     padding: 13px 14px;
-    box-shadow: 0 1px 3px rgba(15,23,42,.05);
+    box-shadow: var(--pgis-shadow-sm);
+    transition: box-shadow .18s, transform .18s;
+}
+.analysis-summary-card:hover {
+    box-shadow: var(--pgis-shadow-md);
+    transform: translateY(-1px);
 }
 .analysis-summary-label {
     display: flex;
@@ -622,6 +748,8 @@ iframe {
 }
 [data-baseweb="tab-list"] {
     gap: 6px;
+    overflow-x: auto;
+    padding-bottom: 2px;
 }
 [data-baseweb="tab"] {
     height: auto;
@@ -629,12 +757,16 @@ iframe {
     border-radius: 999px;
     font-size: 12px;
     font-weight: 800;
+    white-space: nowrap;
 }
 
 /* ── Streamlit overrides ─────────────────────────────────────────────── */
 hr { border: none !important; border-top: 1px solid #e2e8f0 !important; margin: 1rem 0 !important; }
 h3 { font-size: 0.9375rem !important; font-weight: 800 !important; color: #0f172a !important; letter-spacing: -.2px !important; }
 [data-testid="stCaption"] { color: #94a3b8 !important; font-size: 11.5px !important; }
+[data-testid="stMarkdownContainer"] p {
+    line-height: 1.55;
+}
 
 /* ── Scrollbar ───────────────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 5px; height: 5px; }
@@ -677,6 +809,12 @@ h3 { font-size: 0.9375rem !important; font-weight: 800 !important; color: #0f172
         font-size: 22px;
         letter-spacing: -.3px;
     }
+    .pgis-command-strip {
+        grid-template-columns: 1fr;
+    }
+    .pgis-command-strip__meta {
+        justify-content: flex-start;
+    }
     .analysis-summary-row {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
@@ -717,6 +855,18 @@ h3 { font-size: 0.9375rem !important; font-weight: 800 !important; color: #0f172
         align-items: flex-start;
         padding: 10px 12px;
         font-size: 12px;
+    }
+    .pgis-command-strip {
+        padding: 11px 12px;
+        border-radius: 10px;
+    }
+    .pgis-command-strip__sub {
+        white-space: normal;
+    }
+    .pgis-state-chip {
+        flex: 1 1 calc(50% - 6px);
+        justify-content: center;
+        text-align: center;
     }
     [data-testid="stForm"] {
         padding: .875rem !important;
@@ -810,6 +960,10 @@ h3 { font-size: 0.9375rem !important; font-weight: 800 !important; color: #0f172
         flex-basis: 100%;
         justify-content: flex-start;
         text-align: left;
+    }
+    .pgis-state-chip {
+        flex-basis: 100%;
+        justify-content: flex-start;
     }
     .pgis-kpi-row {
         grid-template-columns: 1fr;
@@ -1823,7 +1977,32 @@ if st.session_state.map_click_msg:
 # ========== 메인 레이아웃 ==========
 selected_dong = st.session_state.get("selected_dong", "전체")
 
-if st.button("◀ 접기" if st.session_state.sidebar_open else "☰ 신고 폼", key="toggle_report_form"):
+if st.session_state.map_focus == "query" and st.session_state.query_lat is not None and st.session_state.query_lng is not None:
+    workflow_title = "확률 조회 모드"
+    workflow_sub = f"우클릭 위치 기준 · 위도 {st.session_state.query_lat:.5f} / 경도 {st.session_state.query_lng:.5f}"
+elif st.session_state.clicked_lat is not None and st.session_state.clicked_lng is not None:
+    workflow_title = "신고 위치 선택됨"
+    workflow_sub = f"좌측 신고 폼에서 유형과 설명을 완성하세요 · {get_dong_by_coords(st.session_state.clicked_lat, st.session_state.clicked_lng)}"
+else:
+    workflow_title = "지도 탐색 대기"
+    workflow_sub = "지도 좌클릭은 신고 위치 선택, 우클릭은 사고 가능성 조회입니다."
+
+form_chip = "신고 폼 열림" if st.session_state.sidebar_open else "신고 폼 접힘"
+st.markdown(f"""
+<div class="pgis-command-strip">
+    <div class="pgis-command-strip__main">
+        <div class="pgis-command-strip__title">작업 상태 · {html.escape(workflow_title)}</div>
+        <div class="pgis-command-strip__sub">{html.escape(workflow_sub)}</div>
+    </div>
+    <div class="pgis-command-strip__meta">
+        <span class="pgis-state-chip pgis-state-chip--active">필터 {html.escape(str(selected_dong))}</span>
+        <span class="pgis-state-chip">{form_chip}</span>
+        <span class="pgis-state-chip">신고 {len(reports_all):,}건</span>
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
+if st.button("신고 폼 접기" if st.session_state.sidebar_open else "신고 폼 열기", key="toggle_report_form"):
     st.session_state.sidebar_open = not st.session_state.sidebar_open
     st.rerun()
 
@@ -1865,8 +2044,11 @@ if st.session_state.sidebar_open:
             default_lat = st.session_state.clicked_lat if st.session_state.clicked_lat is not None else JUNGGU_CENTER[0]
             default_lng = st.session_state.clicked_lng if st.session_state.clicked_lng is not None else JUNGGU_CENTER[1]
             input_version = st.session_state.location_input_version
-            lat = st.number_input("위도", value=float(default_lat), format="%.6f", key=f"lat_input_{input_version}")
-            lng = st.number_input("경도", value=float(default_lng), format="%.6f", key=f"lng_input_{input_version}")
+            coord_col1, coord_col2 = st.columns(2)
+            with coord_col1:
+                lat = st.number_input("위도", value=float(default_lat), format="%.6f", key=f"lat_input_{input_version}")
+            with coord_col2:
+                lng = st.number_input("경도", value=float(default_lng), format="%.6f", key=f"lng_input_{input_version}")
             selected_report_dong = get_dong_by_coords(lat, lng)
 
             desc = st.text_area("상세 설명", max_chars=100, placeholder="예: 횡단보도 직전 조명 전부 고장...")
@@ -1903,77 +2085,67 @@ if st.session_state.sidebar_open:
                     st.success(f"✅ 신고 저장 | {dong}")
                     st.rerun()
 
-        st.markdown("---")
-
-        st.markdown("""
-        <div class="pgis-section-head" style="margin-bottom:8px;">
-            <div class="pgis-section-title">
-                <div class="pgis-section-title__icon" style="background:#f5f3ff;">📊</div>
-                데이터 관리
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-        col_a, col_b = st.columns(2)
-        with col_a:
-            if st.button("⬇️ CSV 다운로드", use_container_width=True):
-                if reports_all:
-                    df = reports_df_all.copy()
-                    export_columns = ["id", "lat", "lng", "dong", "type", "intensity", "time", "created_at", "desc"]
-                    df = df[[col for col in export_columns if col in df.columns]]
-                    csv = df.to_csv(index=False, encoding="utf-8-sig")
-                    st.download_button(
-                        "지도 데이터 CSV 다운로드",
-                        csv,
-                        f"pgis_map_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                        "text/csv",
-                        use_container_width=True
-                    )
-                else:
-                    st.info("신고 데이터가 없습니다")
-
-        with col_b:
-            if st.button("📤 CSV 업로드", use_container_width=True):
-                st.session_state.show_upload = True
-
-        if st.session_state.get("show_upload", False):
-            uploaded = st.file_uploader("CSV 파일 선택", type=["csv"])
-            if uploaded and st.button("업로드 실행"):
-                try:
-                    df = pd.read_csv(uploaded)
-                    uploaded_at = datetime.now()
-                    saved_count = 0
-                    skipped_count = 0
-                    last_uploaded_report = None
-                    for row in df.to_dict("records"):
-                        new_report = build_report_from_csv_row(row, st.session_state.next_id, uploaded_at)
-                        if not new_report:
-                            skipped_count += 1
-                            continue
-                        saved_report = persist_report(new_report)
-                        if saved_report:
-                            st.session_state.reports.append(saved_report)
-                            st.session_state.next_id = max(st.session_state.next_id, saved_report["id"] + 1)
-                            saved_count += 1
-                            last_uploaded_report = saved_report
-                    save_reports(st.session_state.reports)
-                    if last_uploaded_report:
-                        st.session_state.clicked_lat = last_uploaded_report["lat"]
-                        st.session_state.clicked_lng = last_uploaded_report["lng"]
-                        st.session_state.location_input_version += 1
-                        st.session_state.map_click_msg = True
-                        st.session_state.map_focus = "register"
-                    if skipped_count:
-                        st.warning(f"✅ {saved_count}건 업로드 · 위도/경도 누락 {skipped_count}건 제외")
+        with st.expander("데이터 관리", expanded=False):
+            col_a, col_b = st.columns(2)
+            with col_a:
+                if st.button("CSV 다운로드", use_container_width=True):
+                    if reports_all:
+                        df = reports_df_all.copy()
+                        export_columns = ["id", "lat", "lng", "dong", "type", "intensity", "time", "created_at", "desc"]
+                        df = df[[col for col in export_columns if col in df.columns]]
+                        csv = df.to_csv(index=False, encoding="utf-8-sig")
+                        st.download_button(
+                            "지도 데이터 CSV 다운로드",
+                            csv,
+                            f"pgis_map_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                            "text/csv",
+                            use_container_width=True
+                        )
                     else:
-                        st.success(f"✅ {saved_count}건 업로드")
-                    st.session_state.show_upload = False
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"오류: {e}")
+                        st.info("신고 데이터가 없습니다")
 
-        if st.button("🔄 새로고침", use_container_width=True):
-            st.rerun()
+            with col_b:
+                if st.button("CSV 업로드", use_container_width=True):
+                    st.session_state.show_upload = True
+
+            if st.session_state.get("show_upload", False):
+                uploaded = st.file_uploader("CSV 파일 선택", type=["csv"])
+                if uploaded and st.button("업로드 실행", use_container_width=True):
+                    try:
+                        df = pd.read_csv(uploaded)
+                        uploaded_at = datetime.now()
+                        saved_count = 0
+                        skipped_count = 0
+                        last_uploaded_report = None
+                        for row in df.to_dict("records"):
+                            new_report = build_report_from_csv_row(row, st.session_state.next_id, uploaded_at)
+                            if not new_report:
+                                skipped_count += 1
+                                continue
+                            saved_report = persist_report(new_report)
+                            if saved_report:
+                                st.session_state.reports.append(saved_report)
+                                st.session_state.next_id = max(st.session_state.next_id, saved_report["id"] + 1)
+                                saved_count += 1
+                                last_uploaded_report = saved_report
+                        save_reports(st.session_state.reports)
+                        if last_uploaded_report:
+                            st.session_state.clicked_lat = last_uploaded_report["lat"]
+                            st.session_state.clicked_lng = last_uploaded_report["lng"]
+                            st.session_state.location_input_version += 1
+                            st.session_state.map_click_msg = True
+                            st.session_state.map_focus = "register"
+                        if skipped_count:
+                            st.warning(f"✅ {saved_count}건 업로드 · 위도/경도 누락 {skipped_count}건 제외")
+                        else:
+                            st.success(f"✅ {saved_count}건 업로드")
+                        st.session_state.show_upload = False
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"오류: {e}")
+
+            if st.button("새로고침", use_container_width=True):
+                st.rerun()
 
 # ========== 우측: 지도 ==========
 with col_right:
@@ -2430,8 +2602,9 @@ with col_right:
     m.get_root().html.add_child(folium.Element(legend_html))
     
     # 지도 렌더링 및 클릭 처리
+    map_height = 660 if st.session_state.sidebar_open else 720
     st_folium_kwargs = {
-        "height": 720,
+        "height": map_height,
         "returned_objects": [
             "last_clicked",
             "last_object_clicked",
@@ -2824,4 +2997,4 @@ with col_f3:
         "storage_backend",
         "PostgreSQL" if is_database_enabled() else "reports.json",
     )
-    st.caption(f"💾 자동 저장: {storage_backend} | 최종 업데이트: 2026-06-18")
+    st.caption(f"💾 자동 저장: {storage_backend} | 화면 갱신: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
