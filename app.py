@@ -6,6 +6,7 @@ import json
 import os
 from datetime import datetime, timedelta
 import html
+import inspect
 import math
 import streamlit as st
 import streamlit.components.v1 as components
@@ -97,8 +98,20 @@ CUSTOM_CSS = """
 
 .stApp { background: #f0f4f8 !important; }
 .main .block-container {
+    width: 100%;
     padding: 1.5rem 2rem 4rem !important;
     max-width: 1720px !important;
+}
+[data-testid="stHorizontalBlock"],
+[data-testid="column"],
+[data-testid="stVerticalBlock"],
+[data-testid="stElementContainer"] {
+    min-width: 0 !important;
+}
+iframe {
+    display: block;
+    width: 100% !important;
+    max-width: 100% !important;
 }
 
 /* ── Header ──────────────────────────────────────────────────────────── */
@@ -184,7 +197,7 @@ CUSTOM_CSS = """
 /* ── KPI Cards ───────────────────────────────────────────────────────── */
 .pgis-kpi-row {
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(158px, 1fr));
     gap: 10px;
     margin-bottom: 18px;
 }
@@ -475,6 +488,161 @@ h3 { font-size: 0.9375rem !important; font-weight: 800 !important; color: #0f172
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+@media (max-width: 900px) {
+    .main .block-container {
+        padding: 0.875rem 0.875rem 2.5rem !important;
+    }
+    .pgis-header {
+        border-radius: 12px;
+        padding: 18px 16px 16px;
+        margin-bottom: 12px;
+    }
+    .pgis-header h1 {
+        font-size: 1.45rem !important;
+        letter-spacing: -.2px !important;
+    }
+    .pgis-header p {
+        font-size: 12px !important;
+        line-height: 1.5 !important;
+    }
+    .pgis-header__chip {
+        flex: 1 1 calc(50% - 6px);
+        justify-content: center;
+        min-width: 0;
+        text-align: center;
+    }
+    .pgis-kpi-row {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+        margin-bottom: 12px;
+    }
+    .pgis-kpi {
+        padding: 13px 12px 12px;
+    }
+    .pgis-kpi__value {
+        font-size: 22px;
+        letter-spacing: -.3px;
+    }
+    .pgis-section-head,
+    .report-board__header {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+    .pgis-hint-row,
+    .report-board__meta {
+        justify-content: flex-start;
+        width: 100%;
+    }
+    .pgis-hint {
+        flex: 1 1 100%;
+        justify-content: center;
+    }
+    [data-testid="stHorizontalBlock"] {
+        flex-wrap: wrap !important;
+        gap: .75rem !important;
+    }
+    [data-testid="column"] {
+        flex: 1 1 100% !important;
+        width: 100% !important;
+    }
+    .stButton > button,
+    .stDownloadButton > button,
+    [data-testid="stFormSubmitButton"] > button {
+        width: 100% !important;
+    }
+}
+
+@media (max-width: 640px) {
+    .click-alert {
+        align-items: flex-start;
+        padding: 10px 12px;
+        font-size: 12px;
+    }
+    [data-testid="stForm"] {
+        padding: .875rem !important;
+    }
+    .report-board {
+        border-radius: 10px;
+    }
+    .report-board__header {
+        padding: 12px;
+    }
+    .report-table-wrap {
+        max-height: none;
+        overflow: visible;
+    }
+    .report-table,
+    .report-table tbody,
+    .report-table tr,
+    .report-table td {
+        display: block;
+        width: 100% !important;
+    }
+    .report-table thead {
+        display: none;
+    }
+    .report-table tbody tr {
+        display: grid;
+        gap: 8px;
+        margin: 10px;
+        padding: 12px;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        background: #fff;
+    }
+    .report-table tbody td {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 0;
+        border-bottom: 0;
+        background: transparent;
+        font-size: 12px;
+    }
+    .report-table tbody td::before {
+        color: #94a3b8;
+        content: "";
+        flex: 0 0 64px;
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: .3px;
+        text-transform: uppercase;
+    }
+    .report-table .col-id::before { content: "ID"; }
+    .report-table .col-status::before { content: "상태"; }
+    .report-table .col-dong::before { content: "행정동"; }
+    .report-table .col-type::before { content: "유형"; }
+    .report-table .col-risk::before { content: "위험도"; }
+    .report-table .col-time::before { content: "시간"; }
+    .report-table .col-desc {
+        display: block;
+    }
+    .report-table .col-desc::before {
+        display: block;
+        margin-bottom: 4px;
+        content: "설명";
+    }
+    .desc-text {
+        overflow: visible;
+        white-space: normal;
+    }
+}
+
+@media (max-width: 420px) {
+    .main .block-container {
+        padding: .625rem .625rem 2rem !important;
+    }
+    .pgis-header__chip {
+        flex-basis: 100%;
+        justify-content: flex-start;
+        text-align: left;
+    }
+    .pgis-kpi-row {
+        grid-template-columns: 1fr;
+    }
+}
 </style>
 """
 
@@ -1438,11 +1606,9 @@ if st.session_state.map_click_msg:
 # ========== 메인 레이아웃 ==========
 selected_dong = st.session_state.get("selected_dong", "전체")
 
-_tc, _ = st.columns([0.12, 1])
-with _tc:
-    if st.button("◀ 접기" if st.session_state.sidebar_open else "☰ 신고 폼"):
-        st.session_state.sidebar_open = not st.session_state.sidebar_open
-        st.rerun()
+if st.button("◀ 접기" if st.session_state.sidebar_open else "☰ 신고 폼", key="toggle_report_form"):
+    st.session_state.sidebar_open = not st.session_state.sidebar_open
+    st.rerun()
 
 if st.session_state.sidebar_open:
     col_left, col_right = st.columns([0.9, 3.4], gap="medium")
@@ -1638,6 +1804,10 @@ with col_right:
     BottomRightZoomControl().add_to(m)
     m.get_root().header.add_child(folium.Element("""
     <style>
+        html, body, .folium-map, .leaflet-container {
+            max-width: 100% !important;
+            width: 100% !important;
+        }
         /* ── Hover tooltip: strip Leaflet's default wrapper ── */
         .leaflet-tooltip:has(.pgis-report-card) {
             background: transparent !important;
@@ -1841,6 +2011,22 @@ with col_right:
             line-height: 1;
             margin-top: 1px;
         }
+        @media (max-width: 640px) {
+            .query-risk-anchor {
+                transform: translate(-50%, calc(-100% - 12px)) scale(.9);
+                transform-origin: bottom center;
+            }
+            .query-risk-card,
+            .pgis-report-card {
+                width: min(232px, calc(100vw - 28px)) !important;
+            }
+            .pgis-map-legend {
+                right: 10px !important;
+                bottom: 12px !important;
+                min-width: 142px !important;
+                padding: 10px 11px 11px !important;
+            }
+        }
     </style>
     """))
     
@@ -1991,7 +2177,7 @@ with col_right:
         ).add_to(m)
 
     legend_html = """
-    <div style="
+    <div class="pgis-map-legend" style="
         position: fixed;
         right: 18px;
         bottom: 36px;
@@ -2037,17 +2223,21 @@ with col_right:
     m.get_root().html.add_child(folium.Element(legend_html))
     
     # 지도 렌더링 및 클릭 처리
-    map_data = st_folium(
-        m,
-        width=1040,
-        height=760,
-        returned_objects=[
+    st_folium_kwargs = {
+        "height": 720,
+        "returned_objects": [
             "last_clicked",
             "last_object_clicked",
             "last_object_clicked_tooltip",
             "last_object_clicked_popup",
         ],
-    )
+    }
+    if "use_container_width" in inspect.signature(st_folium).parameters:
+        st_folium_kwargs["use_container_width"] = True
+    else:
+        st_folium_kwargs["width"] = 1040
+
+    map_data = st_folium(m, **st_folium_kwargs)
     
     # 클릭 이벤트 처리
     map_interaction = get_map_interaction(map_data)
