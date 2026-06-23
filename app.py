@@ -38,6 +38,8 @@ REPORTS_TABLE = "reports"
 REPORT_TABLE_LIMIT = 250
 MAP_MARKER_LIMIT = 500
 CSV_UPLOAD_ROW_LIMIT = 5000
+HOTSPOT_LIMIT = 8
+MAP_HOTSPOT_LIMIT = 5
 ST_FOLIUM_SUPPORTS_CONTAINER_WIDTH = "use_container_width" in inspect.signature(st_folium).parameters
 
 # ========== 중구 행정동 데이터 ==========
@@ -831,6 +833,76 @@ iframe {
     font-size: 10px;
     font-weight: 800;
 }
+.hotspot-list {
+    overflow: hidden;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(15,23,42,.05);
+}
+.hotspot-row {
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr) minmax(98px, auto);
+    gap: 12px;
+    align-items: center;
+    padding: 13px 15px;
+    border-bottom: 1px solid #f1f5f9;
+}
+.hotspot-row:last-child { border-bottom: 0; }
+.hotspot-rank {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    background: #eef2ff;
+    color: #3730a3;
+    font-size: 12px;
+    font-weight: 900;
+}
+.hotspot-name {
+    color: #0f172a;
+    font-size: 13px;
+    font-weight: 850;
+}
+.hotspot-meta {
+    margin-top: 4px;
+    color: #64748b;
+    font-size: 11.5px;
+    font-weight: 650;
+}
+.hotspot-meter {
+    margin-top: 8px;
+    height: 6px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: #f1f5f9;
+}
+.hotspot-meter span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+}
+.hotspot-score {
+    min-width: 98px;
+    text-align: right;
+}
+.hotspot-score b {
+    display: block;
+    color: #0f172a;
+    font-size: 18px;
+    line-height: 1;
+}
+.hotspot-score span {
+    display: inline-flex;
+    margin-top: 5px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 850;
+}
 [data-baseweb="tab-list"] {
     gap: 6px;
     overflow-x: auto;
@@ -1068,14 +1140,17 @@ h3 { font-size: 0.9375rem !important; font-weight: 800 !important; color: #0f172
         white-space: normal;
     }
     .pgis-risk-list__head,
-    .pgis-risk-row {
+    .pgis-risk-row,
+    .hotspot-row {
         padding-left: 12px;
         padding-right: 12px;
     }
-    .pgis-risk-row {
+    .pgis-risk-row,
+    .hotspot-row {
         grid-template-columns: 30px minmax(0, 1fr);
     }
-    .pgis-risk-score {
+    .pgis-risk-score,
+    .hotspot-score {
         grid-column: 2;
         min-width: 0;
         text-align: left;
@@ -1536,6 +1611,50 @@ def calculate_bayesian_stats_for_point(lat, lng, reports, prior=0.1):
     report_arrays = prepare_report_arrays(reports)
     return calculate_bayesian_stats_from_arrays(lat, lng, report_arrays, prior)
 
+@st.cache_data(show_spinner=False)
+def calculate_hotspot_candidates(grid, reports, selected_dong, limit=HOTSPOT_LIMIT):
+    normalized_reports = normalize_reports(reports)
+    if not normalized_reports:
+        return []
+
+    report_arrays = prepare_report_arrays(normalized_reports)
+    candidates = []
+    for cell in grid:
+        if selected_dong != "전체" and cell.get("dong") != selected_dong:
+            continue
+
+        stats = calculate_bayesian_stats_from_arrays(
+            cell["lat"],
+            cell["lon"],
+            report_arrays,
+            cell.get("prior", 0.1),
+        )
+        if stats["report_count"] <= 0 and stats["posterior"] < 0.16:
+            continue
+
+        candidates.append({
+            "id": cell["id"],
+            "dong": cell["dong"],
+            "lat": float(cell["lat"]),
+            "lng": float(cell["lon"]),
+            "posterior": float(stats["posterior"]),
+            "local_risk": float(stats["local_risk"]),
+            "density_factor": float(stats["density_factor"]),
+            "report_count": int(stats["report_count"]),
+            "weighted_count": float(stats["weighted_count"]),
+        })
+
+    candidates.sort(
+        key=lambda item: (
+            item["posterior"],
+            item["report_count"],
+            item["local_risk"],
+            item["weighted_count"],
+        ),
+        reverse=True,
+    )
+    return candidates[:limit]
+
 def get_color(value):
     """위험도 색상"""
     if value < 0.16:
@@ -1575,6 +1694,32 @@ def get_probability_grade(probability):
         "soft": "#ecfdf5",
         "text": "현재 이 지역의 위험도는 낮습니다. 안전한 상태입니다.",
     }
+
+def render_hotspot_candidates(hotspots):
+    if not hotspots:
+        return ""
+
+    rows = []
+    for rank, hotspot in enumerate(hotspots, start=1):
+        probability = max(0, min(1, hotspot["posterior"]))
+        probability_percent = probability * 100
+        grade = get_probability_grade(probability)
+        density_percent = max(0, min(100, hotspot["density_factor"] * 100))
+        meter_width = max(5, min(100, probability_percent))
+        rows.append(
+            f'<div class="hotspot-row">'
+            f'<div class="hotspot-rank">{rank}</div>'
+            f'<div>'
+            f'<div class="hotspot-name">{html.escape(str(hotspot["dong"]))} 후보 지점</div>'
+            f'<div class="hotspot-meta">주변 신고 {hotspot["report_count"]:,}건 · 밀도 {density_percent:.0f}% · '
+            f'{hotspot["lat"]:.5f}, {hotspot["lng"]:.5f}</div>'
+            f'<div class="hotspot-meter"><span style="width:{meter_width:.0f}%;background:{grade["color"]};"></span></div>'
+            f'</div>'
+            f'<div class="hotspot-score"><b>{probability_percent:.0f}%</b><span style="background:{grade["color"]};">{grade["label"]}</span></div>'
+            f'</div>'
+        )
+
+    return '<div class="hotspot-list">' + "".join(rows) + '</div>'
 
 def format_distance(distance_m):
     if distance_m is None:
@@ -2535,6 +2680,12 @@ with col_right:
     
     # 베이지안 계산
     report_arrays = prepare_report_arrays(reports_for_map)
+    map_hotspots = calculate_hotspot_candidates(
+        st.session_state.grid,
+        reports_for_map,
+        selected_dong,
+        MAP_HOTSPOT_LIMIT,
+    )
     query_lat = st.session_state.query_lat
     query_lng = st.session_state.query_lng
     has_query_location = query_lat is not None and query_lng is not None
@@ -2835,6 +2986,28 @@ with col_right:
                 interactive=False,
             ).add_to(m)
 
+    # 베이지안 위험 후보 지점 — 전체 격자 계산 상위 후보만 얇게 표시
+    for rank, hotspot in enumerate(map_hotspots, start=1):
+        grade = get_probability_grade(hotspot["posterior"])
+        probability = hotspot["posterior"] * 100
+        hotspot_tip = f"""
+        <div style="font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:2px 0;">
+            <div style="font-weight:850;color:#0f172a;font-size:12px;margin-bottom:4px;">#{rank} 위험 후보 · {html.escape(str(hotspot["dong"]))}</div>
+            <div style="font-size:11px;color:#475569;">예상 위험도 <b>{probability:.0f}%</b> · 주변 신고 {hotspot["report_count"]:,}건</div>
+            <div style="font-size:10.5px;color:#94a3b8;margin-top:3px;">좌표 {hotspot["lat"]:.5f}, {hotspot["lng"]:.5f}</div>
+        </div>
+        """
+        folium.CircleMarker(
+            location=[hotspot["lat"], hotspot["lng"]],
+            radius=max(7, 13 - rank),
+            color=grade["color"],
+            weight=2,
+            fill=True,
+            fillColor=grade["color"],
+            fillOpacity=0.16,
+            tooltip=folium.Tooltip(hotspot_tip, sticky=True),
+        ).add_to(m)
+
     # 신고 마커 — 커스텀 핀
     _type_cfg = {
         "조명 부족":   {"emoji": "💡", "bg": "#f97316"},
@@ -3058,6 +3231,13 @@ if reports_all:
                 parsed_datetimes.append(parsed)
             analysis_df["parsed_at"] = pd.to_datetime(parsed_datetimes, errors="coerce")
             dated_analysis_df = analysis_df.dropna(subset=["parsed_at"]).copy()
+            hotspot_candidates = calculate_hotspot_candidates(
+                st.session_state.grid,
+                analysis_df.to_dict("records"),
+                selected_dong,
+                HOTSPOT_LIMIT,
+            )
+            top_hotspot = hotspot_candidates[0] if hotspot_candidates else None
 
             analysis_scope = selected_dong if selected_dong != "전체" else "전체 동"
             analysis_count = len(analysis_df)
@@ -3172,17 +3352,24 @@ if reports_all:
                 "modeBarButtonsToRemove": ["lasso2d", "select2d"],
             }
 
-            watch_value = str(top_watch_row["dong"]) if top_watch_row is not None else top_dong
-            watch_sub = (
-                f'평균 {float(top_watch_row["avg"]):.1f}/5 · 고위험 {int(top_watch_row["high_count"]):,}건'
-                if top_watch_row is not None else "분석 데이터 부족"
-            )
+            if top_hotspot:
+                hotspot_grade = get_probability_grade(top_hotspot["posterior"])
+                watch_value = f'{top_hotspot["dong"]} {top_hotspot["posterior"]:.0%}'
+                watch_sub = f'격자 #{top_hotspot["id"]} · 주변 신고 {top_hotspot["report_count"]:,}건 · 밀도 {top_hotspot["density_factor"]:.0%}'
+                watch_color = hotspot_grade["color"]
+            else:
+                watch_value = str(top_watch_row["dong"]) if top_watch_row is not None else top_dong
+                watch_sub = (
+                    f'평균 {float(top_watch_row["avg"]):.1f}/5 · 고위험 {int(top_watch_row["high_count"]):,}건'
+                    if top_watch_row is not None else "분석 데이터 부족"
+                )
+                watch_color = _analysis_color(float(top_watch_row["avg"])) if top_watch_row is not None else "#64748b"
             briefing_cards = [
                 {
                     "label": "우선 확인",
                     "value": watch_value,
                     "sub": watch_sub,
-                    "color": _analysis_color(float(top_watch_row["avg"])) if top_watch_row is not None else "#64748b",
+                    "color": watch_color,
                 },
                 {
                     "label": "최근 흐름",
@@ -3249,8 +3436,8 @@ if reports_all:
             )
             st.markdown(f'<div class="analysis-summary-row">{summary_html}</div>', unsafe_allow_html=True)
 
-            tab_trend, tab_dong, tab_intensity, tab_type, tab_watch = st.tabs(
-                ["추세", "행정동 순위", "위험도 분포", "신고 유형", "주의 지역"]
+            tab_trend, tab_hotspot, tab_dong, tab_intensity, tab_type, tab_watch = st.tabs(
+                ["추세", "위험 후보", "행정동 순위", "위험도 분포", "신고 유형", "주의 지역"]
             )
 
             with tab_trend:
@@ -3372,6 +3559,64 @@ if reports_all:
                         linecolor="#e2e8f0",
                     )
                     st.plotly_chart(fig_hour, use_container_width=True, config=_plotly_config)
+
+            with tab_hotspot:
+                st.markdown(
+                    '<div class="analysis-tip">베이지안 격자 계산으로 위험 후보 지점을 추립니다. 지도 위 원형 레이어와 같은 후보입니다.</div>',
+                    unsafe_allow_html=True,
+                )
+                if not hotspot_candidates:
+                    st.info("위험 후보를 계산할 수 있는 신고 데이터가 아직 부족합니다.")
+                else:
+                    st.markdown(render_hotspot_candidates(hotspot_candidates), unsafe_allow_html=True)
+                    hotspot_labels = [
+                        f"#{rank} {hotspot['dong']} · {hotspot['posterior']:.0%} · 주변 {hotspot['report_count']:,}건"
+                        for rank, hotspot in enumerate(hotspot_candidates, start=1)
+                    ]
+                    selected_hotspot_label = st.selectbox(
+                        "후보 액션",
+                        hotspot_labels,
+                        key="selected_hotspot_action",
+                    )
+                    selected_hotspot = hotspot_candidates[hotspot_labels.index(selected_hotspot_label)]
+                    hotspot_action_col1, hotspot_action_col2 = st.columns(2)
+                    with hotspot_action_col1:
+                        if st.button("선택 후보 위험도 조회", use_container_width=True):
+                            st.session_state.query_lat = selected_hotspot["lat"]
+                            st.session_state.query_lng = selected_hotspot["lng"]
+                            st.session_state.map_focus = "query"
+                            st.session_state.map_click_msg = False
+                            st.rerun()
+                    with hotspot_action_col2:
+                        if st.button("선택 후보를 신고 폼으로 가져오기", use_container_width=True):
+                            st.session_state.clicked_lat = selected_hotspot["lat"]
+                            st.session_state.clicked_lng = selected_hotspot["lng"]
+                            st.session_state.sidebar_open = True
+                            st.session_state.map_focus = "register"
+                            st.session_state.map_click_msg = True
+                            st.session_state.location_input_version += 1
+                            st.rerun()
+                    hotspot_export = pd.DataFrame([
+                        {
+                            "rank": rank,
+                            "grid_id": hotspot["id"],
+                            "dong": hotspot["dong"],
+                            "lat": hotspot["lat"],
+                            "lng": hotspot["lng"],
+                            "probability": round(hotspot["posterior"], 4),
+                            "nearby_reports": hotspot["report_count"],
+                            "density_factor": round(hotspot["density_factor"], 4),
+                            "local_risk": round(hotspot["local_risk"], 4),
+                        }
+                        for rank, hotspot in enumerate(hotspot_candidates, start=1)
+                    ])
+                    st.download_button(
+                        "위험 후보 CSV 다운로드",
+                        hotspot_export.to_csv(index=False, encoding="utf-8-sig"),
+                        f"pgis_hotspots_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                        "text/csv",
+                        use_container_width=True,
+                    )
 
             with tab_dong:
                 st.markdown(
