@@ -478,6 +478,157 @@ iframe {
     font-weight: 600;
 }
 
+/* ── Analysis charts ─────────────────────────────────────────────────── */
+.analysis-summary-row {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    margin: 0 0 14px;
+}
+.analysis-summary-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 13px 14px;
+    box-shadow: 0 1px 3px rgba(15,23,42,.05);
+}
+.analysis-summary-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: #64748b;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: .3px;
+    text-transform: uppercase;
+}
+.analysis-summary-value {
+    margin-top: 8px;
+    color: #0f172a;
+    font-size: 24px;
+    font-weight: 900;
+    line-height: 1.05;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.analysis-summary-sub {
+    margin-top: 6px;
+    color: #94a3b8;
+    font-size: 11.5px;
+    font-weight: 650;
+}
+.analysis-tip {
+    margin: 0 0 12px;
+    padding: 10px 12px;
+    color: #475569;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 650;
+    line-height: 1.5;
+}
+.pgis-risk-list {
+    overflow: hidden;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(15,23,42,.05);
+}
+.pgis-risk-list__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 13px 15px;
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+}
+.pgis-risk-list__title {
+    color: #0f172a;
+    font-size: 13px;
+    font-weight: 850;
+}
+.pgis-risk-list__sub {
+    color: #94a3b8;
+    font-size: 11.5px;
+    font-weight: 650;
+}
+.pgis-risk-row {
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr) auto;
+    gap: 12px;
+    align-items: center;
+    padding: 12px 15px;
+    border-bottom: 1px solid #f1f5f9;
+}
+.pgis-risk-row:last-child { border-bottom: 0; }
+.pgis-risk-rank {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    background: #f1f5f9;
+    color: #475569;
+    font-size: 12px;
+    font-weight: 850;
+}
+.pgis-risk-name {
+    color: #0f172a;
+    font-size: 13px;
+    font-weight: 800;
+}
+.pgis-risk-meta {
+    margin-top: 4px;
+    color: #64748b;
+    font-size: 11.5px;
+    font-weight: 650;
+}
+.pgis-risk-meter {
+    margin-top: 8px;
+    height: 6px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: #f1f5f9;
+}
+.pgis-risk-meter span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+}
+.pgis-risk-score {
+    min-width: 76px;
+    text-align: right;
+}
+.pgis-risk-score b {
+    display: block;
+    color: #0f172a;
+    font-size: 18px;
+    line-height: 1;
+}
+.pgis-risk-score span {
+    display: inline-flex;
+    margin-top: 5px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 800;
+}
+[data-baseweb="tab-list"] {
+    gap: 6px;
+}
+[data-baseweb="tab"] {
+    height: auto;
+    padding: 8px 12px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 800;
+}
+
 /* ── Streamlit overrides ─────────────────────────────────────────────── */
 hr { border: none !important; border-top: 1px solid #e2e8f0 !important; margin: 1rem 0 !important; }
 h3 { font-size: 0.9375rem !important; font-weight: 800 !important; color: #0f172a !important; letter-spacing: -.2px !important; }
@@ -523,6 +674,12 @@ h3 { font-size: 0.9375rem !important; font-weight: 800 !important; color: #0f172
     .pgis-kpi__value {
         font-size: 22px;
         letter-spacing: -.3px;
+    }
+    .analysis-summary-row {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .analysis-summary-value {
+        font-size: 21px;
     }
     .pgis-section-head,
     .report-board__header {
@@ -628,6 +785,19 @@ h3 { font-size: 0.9375rem !important; font-weight: 800 !important; color: #0f172
         overflow: visible;
         white-space: normal;
     }
+    .pgis-risk-list__head,
+    .pgis-risk-row {
+        padding-left: 12px;
+        padding-right: 12px;
+    }
+    .pgis-risk-row {
+        grid-template-columns: 30px minmax(0, 1fr);
+    }
+    .pgis-risk-score {
+        grid-column: 2;
+        min-width: 0;
+        text-align: left;
+    }
 }
 
 @media (max-width: 420px) {
@@ -640,6 +810,9 @@ h3 { font-size: 0.9375rem !important; font-weight: 800 !important; color: #0f172
         text-align: left;
     }
     .pgis-kpi-row {
+        grid-template-columns: 1fr;
+    }
+    .analysis-summary-row {
         grid-template-columns: 1fr;
     }
 }
@@ -2286,156 +2459,297 @@ if st.session_state.reports:
     if reports_df.empty or "dong" not in reports_df.columns:
         st.info("분석 가능한 신고 데이터가 없습니다.")
     else:
-        _chart_layout = dict(
-            height=300,
-            showlegend=False,
-            plot_bgcolor="#ffffff",
-            paper_bgcolor="#ffffff",
-            font=dict(family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", size=12, color="#475569"),
-            margin=dict(l=8, r=8, t=44, b=8),
-            xaxis=dict(showgrid=False, linecolor="#e2e8f0", tickcolor="#e2e8f0"),
-            yaxis=dict(showgrid=True, gridcolor="#f1f5f9", linecolor="#e2e8f0", zeroline=False),
-        )
+        analysis_df = reports_df.copy()
+        if selected_dong != "전체":
+            analysis_df = analysis_df[analysis_df["dong"] == selected_dong].copy()
 
-        col_chart1, col_chart2 = st.columns(2)
-
-        with col_chart1:
-            dong_stats = (
-                reports_df.groupby("dong")
-                .agg(count=("intensity", "count"), avg_intensity=("intensity", "mean"))
-                .sort_values("count", ascending=False)
-                .reset_index()
+        if analysis_df.empty:
+            st.info("선택한 동에 분석 가능한 신고 데이터가 없습니다.")
+        else:
+            analysis_df["intensity"] = (
+                pd.to_numeric(analysis_df["intensity"], errors="coerce")
+                .fillna(3)
+                .clip(1, 5)
+                .astype(int)
+            )
+            analysis_df["type"] = (
+                analysis_df.get("type", pd.Series(["기타"] * len(analysis_df), index=analysis_df.index))
+                .fillna("기타")
+                .replace("", "기타")
             )
 
-            def _bar_color(avg):
-                if avg >= 4.0: return "#ef4444"
-                if avg >= 3.0: return "#f59e0b"
+            analysis_scope = selected_dong if selected_dong != "전체" else "전체 동"
+            analysis_count = len(analysis_df)
+            avg_intensity = float(analysis_df["intensity"].mean()) if analysis_count else 0
+            high_risk = int((analysis_df["intensity"] >= 4).sum())
+            mid_risk = int((analysis_df["intensity"] == 3).sum())
+            low_risk = int((analysis_df["intensity"] <= 2).sum())
+
+            type_counts = analysis_df["type"].value_counts().reset_index()
+            type_counts.columns = ["type", "count"]
+            top_type = str(type_counts.iloc[0]["type"]) if not type_counts.empty else "-"
+            top_type_count = int(type_counts.iloc[0]["count"]) if not type_counts.empty else 0
+
+            dong_stats = (
+                analysis_df.groupby("dong")
+                .agg(
+                    count=("intensity", "count"),
+                    avg_intensity=("intensity", "mean"),
+                    high_count=("intensity", lambda s: int((s >= 4).sum())),
+                )
+                .sort_values(["count", "avg_intensity"], ascending=False)
+                .reset_index()
+            )
+            top_dong = str(dong_stats.iloc[0]["dong"]) if not dong_stats.empty else "-"
+            top_dong_count = int(dong_stats.iloc[0]["count"]) if not dong_stats.empty else 0
+
+            def _analysis_color(avg):
+                if avg >= 4.0:
+                    return "#ef4444"
+                if avg >= 3.0:
+                    return "#f97316"
+                if avg >= 2.0:
+                    return "#f59e0b"
                 return "#22c55e"
 
-            fig1 = go.Figure(go.Bar(
-                x=dong_stats["dong"],
-                y=dong_stats["count"],
-                marker_color=[_bar_color(a) for a in dong_stats["avg_intensity"]],
-                marker_line_width=0,
-                text=[f"평균 {a:.1f}" for a in dong_stats["avg_intensity"]],
-                textposition="outside",
-                textfont=dict(size=10, color="#64748b"),
-                hovertemplate="<b>%{x}</b><br>신고 %{y}건<br>평균 위험도 %{customdata:.1f}<extra></extra>",
-                customdata=dong_stats["avg_intensity"],
-            ))
-            fig1.update_layout(
-                **_chart_layout,
-                title=dict(
-                    text="<b>행정동별 신고 현황</b>  <span style='font-size:10px;color:#94a3b8;font-weight:400'>막대 색상 = 평균 위험도</span>",
-                    font_size=13, x=0,
-                ),
-                yaxis_title="신고 건수",
-            )
-            st.plotly_chart(fig1, use_container_width=True)
+            def _avg_risk_display(avg):
+                if avg >= 4.0:
+                    return "고위험", "#ef4444"
+                if avg >= 3.0:
+                    return "주의", "#f97316"
+                if avg >= 2.0:
+                    return "관찰", "#f59e0b"
+                return "낮음", "#22c55e"
 
-        with col_chart2:
-            all_levels = pd.Series(0, index=range(1, 6))
-            intensity_counts = reports_df["intensity"].value_counts()
-            intensity_dist = all_levels.add(intensity_counts, fill_value=0).astype(int)
-            total_i = intensity_dist.sum() or 1
-            level_colors = ["#22c55e", "#84cc16", "#f59e0b", "#f97316", "#ef4444"]
-            level_labels = ["1단계\n(낮음)", "2단계", "3단계\n(보통)", "4단계", "5단계\n(높음)"]
-
-            fig2 = go.Figure(go.Bar(
-                x=level_labels,
-                y=intensity_dist.values,
-                marker_color=level_colors,
-                marker_line_width=0,
-                text=[f"{v}건 ({v/total_i:.0%})" if v > 0 else "" for v in intensity_dist.values],
-                textposition="outside",
-                textfont=dict(size=10),
-                hovertemplate="<b>위험도 %{x}</b><br>신고 %{y}건<extra></extra>",
-            ))
-            fig2.update_layout(
-                **_chart_layout,
-                title=dict(text="<b>위험도 단계별 분포</b>", font_size=13, x=0),
-                yaxis_title="신고 건수",
-            )
-            st.plotly_chart(fig2, use_container_width=True)
-
-        col_chart3, col_chart4 = st.columns(2)
-
-        with col_chart3:
-            type_counts = reports_df["type"].value_counts().reset_index()
-            type_counts.columns = ["type", "count"]
-            type_color_map = {
-                "조명 부족": "#f97316",
-                "시야 차단": "#ef4444",
-                "도로 파손": "#8b5cf6",
-                "불법 주정차": "#3b82f6",
-                "기타": "#94a3b8",
-            }
-            total_t = type_counts["count"].sum() or 1
-            fig3 = go.Figure(go.Bar(
-                x=type_counts["count"],
-                y=type_counts["type"],
-                orientation="h",
-                marker_color=[type_color_map.get(t, "#94a3b8") for t in type_counts["type"]],
-                marker_line_width=0,
-                text=[f"{c}건 ({c/total_t:.0%})" for c in type_counts["count"]],
-                textposition="outside",
-                textfont=dict(size=10),
-                hovertemplate="<b>%{y}</b><br>신고 %{x}건<extra></extra>",
-            ))
-            fig3.update_layout(
-                **_chart_layout,
-                title=dict(text="<b>신고 유형별 분포</b>", font_size=13, x=0),
-            )
-            fig3.update_xaxes(showgrid=True, gridcolor="#f1f5f9", linecolor="#e2e8f0", title_text="신고 건수")
-            fig3.update_yaxes(showgrid=False, linecolor="#e2e8f0", autorange="reversed")
-            st.plotly_chart(fig3, use_container_width=True)
-
-        with col_chart4:
-            high_risk = int((reports_df["intensity"] >= 4).sum())
-            mid_risk = int((reports_df["intensity"] == 3).sum())
-            low_risk = int((reports_df["intensity"] <= 2).sum())
-            dong_risk = (
-                reports_df.groupby("dong")
-                .agg(count=("intensity", "count"), avg=("intensity", "mean"))
-                .sort_values(["avg", "count"], ascending=False)
-                .reset_index()
-            )
-            rows_html = ""
-            for _, row in dong_risk.iterrows():
-                risk_color = "#ef4444" if row["avg"] >= 4 else "#f59e0b" if row["avg"] >= 3 else "#22c55e"
-                rows_html += (
-                    f'<div style="display:flex;align-items:center;justify-content:space-between;'
-                    f'padding:8px 14px;border-bottom:1px solid #f1f5f9;">'
-                    f'<span style="font-size:13px;font-weight:600;color:#0f172a;">{html.escape(str(row["dong"]))}</span>'
-                    f'<div style="display:flex;align-items:center;gap:8px;">'
-                    f'<span style="font-size:11px;color:#64748b;">{int(row["count"])}건</span>'
-                    f'<span style="background:{risk_color};color:#fff;font-size:10px;font-weight:700;'
-                    f'padding:2px 8px;border-radius:999px;">평균 {row["avg"]:.1f}</span>'
-                    f'</div></div>'
+            def _chart_layout(title, height=430, left_margin=8, bottom_margin=30):
+                return dict(
+                    height=height,
+                    showlegend=False,
+                    plot_bgcolor="#ffffff",
+                    paper_bgcolor="#ffffff",
+                    font=dict(
+                        family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+                        size=12,
+                        color="#475569",
+                    ),
+                    margin=dict(l=left_margin, r=34, t=48, b=bottom_margin),
+                    title=dict(text=title, font_size=14, x=0, y=0.98),
+                    hoverlabel=dict(bgcolor="#0f172a", bordercolor="#0f172a", font_color="#f8fafc"),
+                    hovermode="closest",
+                    bargap=0.34,
                 )
-            st.markdown(
-                f'<div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;">'
-                f'<div style="padding:12px 14px 10px;border-bottom:1px solid #e2e8f0;background:#f8fafc;">'
-                f'<div style="font-size:13px;font-weight:800;color:#0f172a;margin-bottom:8px;">주의 필요 지역</div>'
-                f'<div style="display:flex;gap:20px;">'
-                f'<div style="text-align:center;">'
-                f'<div style="font-size:22px;font-weight:900;color:#ef4444;">{high_risk}</div>'
-                f'<div style="font-size:10px;color:#94a3b8;font-weight:700;">고위험</div>'
+
+            _plotly_config = {
+                "displayModeBar": True,
+                "responsive": True,
+                "modeBarButtonsToRemove": ["lasso2d", "select2d"],
+            }
+
+            summary_cards = [
+                {
+                    "label": "분석 범위",
+                    "value": analysis_scope,
+                    "sub": f"{analysis_count:,}건 기준",
+                    "color": "#3b82f6",
+                },
+                {
+                    "label": "평균 위험도",
+                    "value": f"{avg_intensity:.1f}/5",
+                    "sub": f"높음 {high_risk:,}건 · 주의 {mid_risk:,}건 · 낮음 {low_risk:,}건",
+                    "color": _analysis_color(avg_intensity),
+                },
+                {
+                    "label": "최다 신고 지역",
+                    "value": top_dong,
+                    "sub": f"{top_dong_count:,}건 신고",
+                    "color": "#8b5cf6",
+                },
+                {
+                    "label": "주요 신고 유형",
+                    "value": top_type,
+                    "sub": f"{top_type_count:,}건",
+                    "color": _REPORT_TYPE_THEMES.get(top_type, _REPORT_TYPE_THEMES["기타"])["accent"],
+                },
+            ]
+            summary_html = "".join(
+                f'<div class="analysis-summary-card" style="border-top:3px solid {card["color"]};">'
+                f'<div class="analysis-summary-label"><span style="color:{card["color"]};">●</span>{html.escape(card["label"])}</div>'
+                f'<div class="analysis-summary-value" title="{html.escape(str(card["value"]))}">{html.escape(str(card["value"]))}</div>'
+                f'<div class="analysis-summary-sub">{html.escape(card["sub"])}</div>'
                 f'</div>'
-                f'<div style="text-align:center;">'
-                f'<div style="font-size:22px;font-weight:900;color:#f59e0b;">{mid_risk}</div>'
-                f'<div style="font-size:10px;color:#94a3b8;font-weight:700;">주의</div>'
-                f'</div>'
-                f'<div style="text-align:center;">'
-                f'<div style="font-size:22px;font-weight:900;color:#22c55e;">{low_risk}</div>'
-                f'<div style="font-size:10px;color:#94a3b8;font-weight:700;">낮음</div>'
-                f'</div>'
-                f'</div>'
-                f'</div>'
-                f'<div style="overflow-y:auto;max-height:220px;">{rows_html}</div>'
-                f'</div>',
-                unsafe_allow_html=True,
+                for card in summary_cards
             )
+            st.markdown(f'<div class="analysis-summary-row">{summary_html}</div>', unsafe_allow_html=True)
+
+            tab_dong, tab_intensity, tab_type, tab_watch = st.tabs(
+                ["행정동 순위", "위험도 분포", "신고 유형", "주의 지역"]
+            )
+
+            with tab_dong:
+                st.markdown(
+                    '<div class="analysis-tip">신고가 많은 행정동을 먼저 보여줍니다. 막대 색은 해당 동의 평균 위험도입니다.</div>',
+                    unsafe_allow_html=True,
+                )
+                dong_chart_df = (
+                    dong_stats.head(12)
+                    .sort_values(["count", "avg_intensity"], ascending=True)
+                    .reset_index(drop=True)
+                )
+                fig1 = go.Figure(go.Bar(
+                    x=dong_chart_df["count"],
+                    y=dong_chart_df["dong"],
+                    orientation="h",
+                    marker_color=[_analysis_color(a) for a in dong_chart_df["avg_intensity"]],
+                    marker_line_width=0,
+                    text=[f"{int(c):,}건" for c in dong_chart_df["count"]],
+                    textposition="outside",
+                    textfont=dict(size=11, color="#475569"),
+                    cliponaxis=False,
+                    customdata=list(zip(dong_chart_df["avg_intensity"], dong_chart_df["high_count"])),
+                    hovertemplate=(
+                        "<b>%{y}</b><br>"
+                        "신고 %{x:,}건<br>"
+                        "평균 위험도 %{customdata[0]:.1f}/5<br>"
+                        "고위험 %{customdata[1]:,}건<extra></extra>"
+                    ),
+                ))
+                fig1.update_layout(
+                    **_chart_layout(
+                        f"<b>{html.escape(analysis_scope)} 행정동별 신고 순위</b>",
+                        height=max(360, 120 + len(dong_chart_df) * 34),
+                        left_margin=92,
+                    )
+                )
+                fig1.update_xaxes(
+                    title_text="신고 건수",
+                    showgrid=True,
+                    gridcolor="#f1f5f9",
+                    zeroline=False,
+                    linecolor="#e2e8f0",
+                )
+                fig1.update_yaxes(title_text="", showgrid=False, linecolor="#e2e8f0")
+                st.plotly_chart(fig1, use_container_width=True, config=_plotly_config)
+
+            with tab_intensity:
+                st.markdown(
+                    '<div class="analysis-tip">신고의 심각도가 어느 단계에 몰려 있는지 확인합니다. 비율이 높은 단계부터 현장 대응 우선순위를 잡기 좋습니다.</div>',
+                    unsafe_allow_html=True,
+                )
+                all_levels = pd.Series(0, index=range(1, 6))
+                intensity_counts = analysis_df["intensity"].value_counts()
+                intensity_dist = all_levels.add(intensity_counts, fill_value=0).astype(int)
+                total_i = intensity_dist.sum() or 1
+                level_colors = ["#22c55e", "#84cc16", "#f59e0b", "#f97316", "#ef4444"]
+                level_labels = ["1 낮음", "2", "3 보통", "4", "5 높음"]
+                level_share = [v / total_i for v in intensity_dist.values]
+
+                fig2 = go.Figure(go.Bar(
+                    x=level_labels,
+                    y=intensity_dist.values,
+                    marker_color=level_colors,
+                    marker_line_width=0,
+                    text=[f"{v:,}건<br>{share:.0%}" if v > 0 else "" for v, share in zip(intensity_dist.values, level_share)],
+                    textposition="outside",
+                    textfont=dict(size=11, color="#475569"),
+                    cliponaxis=False,
+                    customdata=level_share,
+                    hovertemplate="<b>위험도 %{x}</b><br>신고 %{y:,}건<br>비율 %{customdata:.1%}<extra></extra>",
+                ))
+                fig2.update_layout(
+                    **_chart_layout(f"<b>{html.escape(analysis_scope)} 위험도 단계별 분포</b>", height=410)
+                )
+                fig2.update_xaxes(title_text="위험도 단계", showgrid=False, linecolor="#e2e8f0")
+                fig2.update_yaxes(
+                    title_text="신고 건수",
+                    showgrid=True,
+                    gridcolor="#f1f5f9",
+                    zeroline=False,
+                    linecolor="#e2e8f0",
+                )
+                st.plotly_chart(fig2, use_container_width=True, config=_plotly_config)
+
+            with tab_type:
+                st.markdown(
+                    '<div class="analysis-tip">유형별 신고 비중입니다. 같은 색상 체계를 지도 마커와 맞춰 두었습니다.</div>',
+                    unsafe_allow_html=True,
+                )
+                type_color_map = {
+                    "조명 부족": "#f97316",
+                    "시야 차단": "#ef4444",
+                    "도로 파손": "#8b5cf6",
+                    "불법 주정차": "#3b82f6",
+                    "기타": "#94a3b8",
+                }
+                total_t = type_counts["count"].sum() or 1
+                type_chart_df = type_counts.sort_values("count", ascending=True).reset_index(drop=True)
+                type_share = [c / total_t for c in type_chart_df["count"]]
+                fig3 = go.Figure(go.Bar(
+                    x=type_chart_df["count"],
+                    y=type_chart_df["type"],
+                    orientation="h",
+                    marker_color=[type_color_map.get(t, "#94a3b8") for t in type_chart_df["type"]],
+                    marker_line_width=0,
+                    text=[f"{int(c):,}건 · {share:.0%}" for c, share in zip(type_chart_df["count"], type_share)],
+                    textposition="outside",
+                    textfont=dict(size=11, color="#475569"),
+                    cliponaxis=False,
+                    customdata=type_share,
+                    hovertemplate="<b>%{y}</b><br>신고 %{x:,}건<br>비율 %{customdata:.1%}<extra></extra>",
+                ))
+                fig3.update_layout(
+                    **_chart_layout(
+                        f"<b>{html.escape(analysis_scope)} 신고 유형별 분포</b>",
+                        height=max(340, 150 + len(type_chart_df) * 44),
+                        left_margin=96,
+                    )
+                )
+                fig3.update_xaxes(showgrid=True, gridcolor="#f1f5f9", linecolor="#e2e8f0", title_text="신고 건수")
+                fig3.update_yaxes(showgrid=False, linecolor="#e2e8f0", autorange="reversed")
+                st.plotly_chart(fig3, use_container_width=True, config=_plotly_config)
+
+            with tab_watch:
+                st.markdown(
+                    '<div class="analysis-tip">평균 위험도와 신고 건수를 함께 보고 우선 확인할 지역을 고릅니다.</div>',
+                    unsafe_allow_html=True,
+                )
+                dong_risk = (
+                    analysis_df.groupby("dong")
+                    .agg(
+                        count=("intensity", "count"),
+                        avg=("intensity", "mean"),
+                        high_count=("intensity", lambda s: int((s >= 4).sum())),
+                    )
+                    .sort_values(["avg", "count"], ascending=False)
+                    .reset_index()
+                )
+                rows_html = ""
+                for rank, (_, row) in enumerate(dong_risk.head(10).iterrows(), start=1):
+                    risk_label, risk_color = _avg_risk_display(float(row["avg"]))
+                    meter_width = max(6, min(100, float(row["avg"]) / 5 * 100))
+                    rows_html += (
+                        f'<div class="pgis-risk-row">'
+                        f'<div class="pgis-risk-rank">{rank}</div>'
+                        f'<div>'
+                        f'<div class="pgis-risk-name">{html.escape(str(row["dong"]))}</div>'
+                        f'<div class="pgis-risk-meta">신고 {int(row["count"]):,}건 · 고위험 {int(row["high_count"]):,}건</div>'
+                        f'<div class="pgis-risk-meter"><span style="width:{meter_width:.0f}%;background:{risk_color};"></span></div>'
+                        f'</div>'
+                        f'<div class="pgis-risk-score"><b>{float(row["avg"]):.1f}</b><span style="background:{risk_color};">{risk_label}</span></div>'
+                        f'</div>'
+                    )
+                st.markdown(
+                    f'<div class="pgis-risk-list">'
+                    f'<div class="pgis-risk-list__head">'
+                    f'<div>'
+                    f'<div class="pgis-risk-list__title">주의 필요 지역</div>'
+                    f'<div class="pgis-risk-list__sub">{html.escape(analysis_scope)} · 평균 위험도순</div>'
+                    f'</div>'
+                    f'<div class="report-pill">{analysis_count:,}건 분석</div>'
+                    f'</div>'
+                    f'{rows_html}'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
 
 st.markdown("""
 <div class="pgis-section-head">
