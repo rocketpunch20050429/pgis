@@ -36,6 +36,7 @@ RIGHT_CLICK_QUERY_TOKEN = "__RIGHT_CLICK_QUERY__"
 REPORTS_FILE = os.path.join(os.path.dirname(__file__), "reports.json")
 REPORTS_TABLE = "reports"
 REPORT_TABLE_LIMIT = 250
+MAP_MARKER_LIMIT = 500
 ST_FOLIUM_SUPPORTS_CONTAINER_WIDTH = "use_container_width" in inspect.signature(st_folium).parameters
 
 # ========== 중구 행정동 데이터 ==========
@@ -2198,7 +2199,18 @@ if st.session_state.sidebar_open:
 
 # ========== 우측: 지도 ==========
 with col_right:
-    st.markdown("""
+    reports_for_map = reports_all
+    map_marker_candidates = [
+        report for report in reports_for_map
+        if selected_dong == "전체" or report.get("dong") == selected_dong
+    ]
+    map_marker_candidates.sort(key=lambda report: coerce_int(report.get("id"), 0), reverse=True)
+    map_marker_total = len(map_marker_candidates)
+    map_reports = map_marker_candidates[:MAP_MARKER_LIMIT]
+    hidden_marker_count = max(0, map_marker_total - len(map_reports))
+    marker_label = f"{len(map_reports):,}/{map_marker_total:,}건"
+
+    st.markdown(f"""
     <div class="pgis-section-head">
         <div class="pgis-section-title">
             <div class="pgis-section-title__icon" style="background:#fef9c3;">🎯</div>
@@ -2209,12 +2221,14 @@ with col_right:
             <span class="pgis-hint">🖱 <b>우클릭</b>&nbsp;확률 조회</span>
             <span class="pgis-hint">↔ <b>빠른 작업</b>&nbsp;선택·조회 전환</span>
             <span class="pgis-hint">✦ <b>마커 호버</b>&nbsp;신고 상세</span>
+            <span class="pgis-hint">● <b>지도 표시</b>&nbsp;{marker_label}</span>
         </div>
     </div>
     """, unsafe_allow_html=True)
+    if hidden_marker_count:
+        st.caption(f"지도 성능을 위해 최신 {MAP_MARKER_LIMIT:,}건만 마커로 표시합니다. 상세 분석과 위험도 계산은 전체 {map_marker_total:,}건 기준입니다.")
     
     # 베이지안 계산
-    reports_for_map = reports_all
     report_arrays = prepare_report_arrays(reports_for_map)
     query_lat = st.session_state.query_lat
     query_lng = st.session_state.query_lng
@@ -2525,10 +2539,7 @@ with col_right:
         "기타":        {"emoji": "⚠️", "bg": "#64748b"},
     }
 
-    for report in reports_for_map:
-        if selected_dong != "전체" and report.get("dong") != selected_dong:
-            continue
-
+    for report in map_reports:
         tip_html = build_report_popup_html(report)
         cfg = _type_cfg.get(report.get("type", "기타"), _type_cfg["기타"])
         folium.Marker(
@@ -3027,9 +3038,11 @@ if reports_all:
         if df_reports.empty:
             st.info("선택한 동에 표시할 신고 데이터가 없습니다.")
         else:
+            report_table_rows = min(len(df_reports), REPORT_TABLE_LIMIT)
+            report_table_height = min(640, max(260, 116 + report_table_rows * 44))
             components.html(
                 render_report_status_table(df_reports, selected_dong),
-                height=590,
+                height=report_table_height,
                 scrolling=True,
             )
 else:
