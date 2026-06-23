@@ -37,6 +37,7 @@ REPORTS_FILE = os.path.join(os.path.dirname(__file__), "reports.json")
 REPORTS_TABLE = "reports"
 REPORT_TABLE_LIMIT = 250
 MAP_MARKER_LIMIT = 500
+CSV_UPLOAD_ROW_LIMIT = 5000
 ST_FOLIUM_SUPPORTS_CONTAINER_WIDTH = "use_container_width" in inspect.signature(st_folium).parameters
 
 # ========== 중구 행정동 데이터 ==========
@@ -646,6 +647,9 @@ iframe {
     color: #94a3b8;
     font-size: 11.5px;
     font-weight: 650;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 .analysis-tip {
     margin: 0 0 12px;
@@ -760,6 +764,12 @@ iframe {
     font-weight: 800;
     white-space: nowrap;
 }
+[data-testid="stPlotlyChart"] {
+    overflow: hidden;
+    border: 1px solid var(--pgis-border);
+    border-radius: 12px;
+    background: #fff;
+}
 
 /* ── Streamlit overrides ─────────────────────────────────────────────── */
 hr { border: none !important; border-top: 1px solid #e2e8f0 !important; margin: 1rem 0 !important; }
@@ -868,6 +878,31 @@ h3 { font-size: 0.9375rem !important; font-weight: 800 !important; color: #0f172
         flex: 1 1 calc(50% - 6px);
         justify-content: center;
         text-align: center;
+    }
+    [data-baseweb="tab-list"] {
+        gap: 4px;
+        margin: 0 -2px;
+        padding: 0 2px 5px;
+        scrollbar-width: none;
+    }
+    [data-baseweb="tab-list"]::-webkit-scrollbar {
+        display: none;
+    }
+    [data-baseweb="tab"] {
+        flex: 0 0 auto;
+        padding: 7px 10px;
+        font-size: 11.5px;
+    }
+    .analysis-summary-card {
+        padding: 12px;
+    }
+    .analysis-summary-value,
+    .analysis-summary-sub {
+        white-space: normal;
+        word-break: keep-all;
+    }
+    [data-testid="stPlotlyChart"] {
+        border-radius: 10px;
     }
     [data-testid="stForm"] {
         padding: .875rem !important;
@@ -1018,6 +1053,12 @@ def coerce_int(value, default):
     except (TypeError, ValueError):
         return default
 
+def is_within_junggu_bounds(lat, lng):
+    return (
+        JUNGGU_BOUNDS["south"] <= lat <= JUNGGU_BOUNDS["north"]
+        and JUNGGU_BOUNDS["west"] <= lng <= JUNGGU_BOUNDS["east"]
+    )
+
 def get_csv_value(row, candidates, default=None):
     values = {str(key).strip().lower(): value for key, value in row.items()}
     for candidate in candidates:
@@ -1059,6 +1100,20 @@ def build_report_from_csv_row(row, report_id, uploaded_at):
         "desc": desc,
         "dong": dong or get_dong_by_coords(lat, lng),
     }
+
+def report_dedupe_key(report):
+    lat = coerce_float(report.get("lat"), None)
+    lng = coerce_float(report.get("lng", report.get("lon")), None)
+    if lat is None or lng is None:
+        return None
+
+    return (
+        round(lat, 6),
+        round(lng, 6),
+        str(report.get("type", "")).strip().casefold(),
+        coerce_int(report.get("intensity"), 0),
+        str(report.get("desc", "")).strip().casefold(),
+    )
 
 def normalize_report(report):
     if not isinstance(report, dict):
@@ -2135,6 +2190,17 @@ if st.session_state.sidebar_open:
                         st.success(f"✅ 신고 저장 | {dong}")
                         st.rerun()
 
+        upload_feedback = st.session_state.get("upload_feedback")
+        if upload_feedback:
+            feedback_type, feedback_message = upload_feedback
+            if feedback_type == "success":
+                st.success(feedback_message)
+            elif feedback_type == "warning":
+                st.warning(feedback_message)
+            else:
+                st.info(feedback_message)
+            st.session_state.upload_feedback = None
+
         with st.expander("데이터 관리", expanded=False):
             col_a, col_b = st.columns(2)
             with col_a:
@@ -2160,37 +2226,77 @@ if st.session_state.sidebar_open:
 
             if st.session_state.get("show_upload", False):
                 uploaded = st.file_uploader("CSV 파일 선택", type=["csv"])
+                if uploaded:
+                    st.caption(
+                        f"최대 {CSV_UPLOAD_ROW_LIMIT:,}행까지 업로드됩니다. "
+                        "중복 기준은 좌표·유형·강도·설명 조합입니다."
+                    )
                 if uploaded and st.button("업로드 실행", use_container_width=True):
                     try:
                         df = pd.read_csv(uploaded)
-                        uploaded_at = datetime.now()
-                        saved_count = 0
-                        skipped_count = 0
-                        last_uploaded_report = None
-                        for row in df.to_dict("records"):
-                            new_report = build_report_from_csv_row(row, st.session_state.next_id, uploaded_at)
-                            if not new_report:
-                                skipped_count += 1
-                                continue
-                            saved_report = persist_report(new_report)
-                            if saved_report:
-                                st.session_state.reports.append(saved_report)
-                                st.session_state.next_id = max(st.session_state.next_id, saved_report["id"] + 1)
-                                saved_count += 1
-                                last_uploaded_report = saved_report
-                        save_reports(st.session_state.reports)
-                        if last_uploaded_report:
-                            st.session_state.clicked_lat = last_uploaded_report["lat"]
-                            st.session_state.clicked_lng = last_uploaded_report["lng"]
-                            st.session_state.location_input_version += 1
-                            st.session_state.map_click_msg = True
-                            st.session_state.map_focus = "register"
-                        if skipped_count:
-                            st.warning(f"✅ {saved_count}건 업로드 · 위도/경도 누락 {skipped_count}건 제외")
+                        if len(df) > CSV_UPLOAD_ROW_LIMIT:
+                            st.error(f"한 번에 {CSV_UPLOAD_ROW_LIMIT:,}행까지만 업로드할 수 있습니다.")
                         else:
-                            st.success(f"✅ {saved_count}건 업로드")
-                        st.session_state.show_upload = False
-                        st.rerun()
+                            uploaded_at = datetime.now()
+                            saved_count = 0
+                            skipped_count = 0
+                            outside_count = 0
+                            duplicate_count = 0
+                            last_uploaded_report = None
+                            existing_keys = {
+                                key for key in (report_dedupe_key(report) for report in st.session_state.reports)
+                                if key is not None
+                            }
+
+                            for row in df.to_dict("records"):
+                                new_report = build_report_from_csv_row(row, st.session_state.next_id, uploaded_at)
+                                if not new_report:
+                                    skipped_count += 1
+                                    continue
+                                if not is_within_junggu_bounds(new_report["lat"], new_report["lng"]):
+                                    outside_count += 1
+                                    continue
+
+                                dedupe_key = report_dedupe_key(new_report)
+                                if dedupe_key in existing_keys:
+                                    duplicate_count += 1
+                                    continue
+
+                                saved_report = persist_report(new_report)
+                                if saved_report:
+                                    st.session_state.reports.append(saved_report)
+                                    st.session_state.next_id = max(st.session_state.next_id, saved_report["id"] + 1)
+                                    existing_keys.add(dedupe_key)
+                                    saved_count += 1
+                                    last_uploaded_report = saved_report
+
+                            save_reports(st.session_state.reports)
+                            if last_uploaded_report:
+                                st.session_state.clicked_lat = last_uploaded_report["lat"]
+                                st.session_state.clicked_lng = last_uploaded_report["lng"]
+                                st.session_state.location_input_version += 1
+                                st.session_state.map_click_msg = True
+                                st.session_state.map_focus = "register"
+
+                            upload_summary = [f"{saved_count:,}건 업로드"]
+                            if skipped_count:
+                                upload_summary.append(f"위도/경도 누락 {skipped_count:,}건 제외")
+                            if outside_count:
+                                upload_summary.append(f"중구 범위 밖 {outside_count:,}건 제외")
+                            if duplicate_count:
+                                upload_summary.append(f"중복 {duplicate_count:,}건 제외")
+
+                            if saved_count:
+                                st.session_state.upload_feedback = ("success", "✅ " + " · ".join(upload_summary))
+                            else:
+                                no_save_details = " · ".join(upload_summary[1:]) or f"{len(df):,}행 처리"
+                                st.session_state.upload_feedback = (
+                                    "warning",
+                                    "신규로 추가된 신고가 없습니다 · " + no_save_details,
+                                )
+
+                            st.session_state.show_upload = False
+                            st.rerun()
                     except Exception as e:
                         st.error(f"오류: {e}")
 
@@ -2808,7 +2914,8 @@ if reports_all:
                 )
 
             _plotly_config = {
-                "displayModeBar": True,
+                "displayModeBar": "hover",
+                "displaylogo": False,
                 "responsive": True,
                 "modeBarButtonsToRemove": ["lasso2d", "select2d"],
             }
