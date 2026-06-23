@@ -1986,7 +1986,7 @@ if selected_dong not in dong_options:
 
 if st.session_state.map_focus == "query" and st.session_state.query_lat is not None and st.session_state.query_lng is not None:
     workflow_title = "확률 조회 모드"
-    workflow_sub = f"우클릭 위치 기준 · 위도 {st.session_state.query_lat:.5f} / 경도 {st.session_state.query_lng:.5f}"
+    workflow_sub = f"조회 위치 기준 · 위도 {st.session_state.query_lat:.5f} / 경도 {st.session_state.query_lng:.5f}"
 elif st.session_state.clicked_lat is not None and st.session_state.clicked_lng is not None:
     workflow_title = "신고 위치 선택됨"
     workflow_sub = f"좌측 신고 폼에서 유형과 설명을 완성하세요 · {get_dong_by_coords(st.session_state.clicked_lat, st.session_state.clicked_lng)}"
@@ -2030,6 +2030,27 @@ with action_col2:
         st.session_state.map_focus = "register"
         st.session_state.location_input_version += 1
         st.rerun()
+with action_col3:
+    has_clicked_location = st.session_state.clicked_lat is not None and st.session_state.clicked_lng is not None
+    has_query_location_for_action = st.session_state.query_lat is not None and st.session_state.query_lng is not None
+    if st.session_state.map_focus == "query" and has_query_location_for_action:
+        if st.button("조회 위치를 신고 폼으로 가져오기", key="copy_query_to_report", use_container_width=True):
+            st.session_state.clicked_lat = st.session_state.query_lat
+            st.session_state.clicked_lng = st.session_state.query_lng
+            st.session_state.sidebar_open = True
+            st.session_state.map_click_msg = True
+            st.session_state.map_focus = "register"
+            st.session_state.location_input_version += 1
+            st.rerun()
+    elif has_clicked_location:
+        if st.button("선택 위치 위험도 조회", key="query_selected_location", use_container_width=True):
+            st.session_state.query_lat = st.session_state.clicked_lat
+            st.session_state.query_lng = st.session_state.clicked_lng
+            st.session_state.map_click_msg = False
+            st.session_state.map_focus = "query"
+            st.rerun()
+    else:
+        st.button("위치 선택 후 빠른 작업 가능", key="quick_action_placeholder", use_container_width=True, disabled=True)
 
 if st.session_state.sidebar_open:
     col_left, col_right = st.columns([0.9, 3.4], gap="medium")
@@ -2186,6 +2207,7 @@ with col_right:
         <div class="pgis-hint-row">
             <span class="pgis-hint">🖱 <b>좌클릭</b>&nbsp;신고 등록</span>
             <span class="pgis-hint">🖱 <b>우클릭</b>&nbsp;확률 조회</span>
+            <span class="pgis-hint">↔ <b>빠른 작업</b>&nbsp;선택·조회 전환</span>
             <span class="pgis-hint">✦ <b>마커 호버</b>&nbsp;신고 상세</span>
         </div>
     </div>
@@ -3008,7 +3030,7 @@ if reports_all:
             components.html(
                 render_report_status_table(df_reports, selected_dong),
                 height=590,
-                scrolling=False,
+                scrolling=True,
             )
 else:
     st.info("📌 아직 신고가 없습니다. 지도에서 좌클릭 한 번으로 신고 위치를 등록해주세요.")
